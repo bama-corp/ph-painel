@@ -4,6 +4,31 @@ import { NAV_LINKS } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
 
+function SyncBadge() {
+  const { syncStatus, syncError, pushNow, ready } = useStore();
+  if (!ready) return <span className="text-ink/35">A carregar BD…</span>;
+  const label =
+    syncStatus === "synced"
+      ? "Neon · sync"
+      : syncStatus === "saving"
+        ? "A gravar…"
+        : syncStatus === "loading"
+          ? "A carregar…"
+          : syncStatus === "offline"
+            ? "Offline (local)"
+            : "Erro sync";
+  return (
+    <button
+      type="button"
+      title={syncError ?? "Clica para forçar gravação na BD"}
+      onClick={() => void pushNow()}
+      className={`tracking-wide ${syncStatus === "error" || syncStatus === "offline" ? "text-rust" : "hover:text-ink"}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { state, setMonth, reset } = useStore();
@@ -69,7 +94,7 @@ export function Shell({ children }: { children: ReactNode }) {
               onClick={() => {
                 if (
                   window.confirm(
-                    "Repor ao snapshot do seed (19/08/2026)? Os dados deste browser são apagados. Exporta JSON no Caderno se quiseres guardar.",
+                    "Repor ao snapshot do seed (19/08/2026)? Os dados deste browser são apagados e a BD será actualizada. Exporta JSON no Caderno se quiseres guardar.",
                   )
                 ) {
                   reset();
@@ -79,6 +104,7 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               Repor seed
             </button>
+            <SyncBadge />
           </div>
           <span className="mark mark-soft" aria-hidden />
         </div>

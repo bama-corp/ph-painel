@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   applyAccountOpening,
   applyAddMovement,
@@ -13,12 +13,16 @@ import {
   type MovementResult,
 } from "./engine";
 import { downloadStateJson, exportStateJson, importStateJson, loadState, STORAGE_KEY } from "./persist";
+import { fetchRemoteState, pushRemoteState } from "./remote";
 import { seedState } from "./seed";
 import type { AppState, BudgetRules, Movement, NotebookEntry, Party, RoveClient } from "./types";
 import { uid } from "./money";
 
 type Store = {
   state: AppState;
+  ready: boolean;
+  syncStatus: "idle" | "loading" | "saving" | "synced" | "offline" | "error";
+  syncError: string | null;
   addMovement: (m: Omit<Movement, "id">) => MovementResult;
   payParty: (opts: {
     partyId: string;
@@ -51,19 +55,90 @@ type Store = {
   exportJson: () => string;
   downloadJson: () => void;
   importJson: (raw: string) => { ok: true } | { ok: false; reason: string };
+  pushNow: () => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
+  const [ready, setReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<Store["syncStatus"]>("loading");
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const skipPush = useRef(true);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setSyncStatus("loading");
+      const remote = await fetchRemoteState();
+      if (cancelled) return;
+      if (remote.ok) {
+        setState(remote.state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.state));
+        setSyncStatus("synced");
+        setSyncError(null);
+      } else if (remote.empty) {
+        const local = loadState();
+        setState(local);
+        const pushed = await pushRemoteState(local);
+        setSyncStatus(pushed.ok ? "synced" : "offline");
+        setSyncError(pushed.ok ? null : pushed.reason);
+      } else {
+        setState(loadState());
+        setSyncStatus("offline");
+        setSyncError(remote.reason);
+      }
+      skipPush.current = true;
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (skipPush.current) {
+      skipPush.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      setSyncStatus("saving");
+      const r = await pushRemoteState(state);
+      if (r.ok) {
+        setSyncStatus("synced");
+        setSyncError(null);
+      } else {
+        setSyncStatus("error");
+        setSyncError(r.reason);
+      }
+    }, 600);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [state, ready]);
+
+  async function pushNow() {
+    setSyncStatus("saving");
+    const r = await pushRemoteState(state);
+    if (r.ok) {
+      setSyncStatus("synced");
+      setSyncError(null);
+    } else {
+      setSyncStatus("error");
+      setSyncError(r.reason);
+    }
+  }
 
   const store: Store = {
     state,
+    ready,
+    syncStatus,
+    syncError,
     addMovement: (m) => {
       let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {
@@ -189,7 +264,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeNote: (id) => setState((s) => ({ ...s, notes: s.notes.filter((n) => n.id !== id) })),
     reset: () => {
       localStorage.removeItem(STORAGE_KEY);
-      setState(seedState());
+      const next = seedState();
+      skipPush.current = false;
+      setState(next);
     },
     setMonth: (month) => setState((s) => ({ ...s, month })),
     exportJson: () => exportStateJson(state),
@@ -197,9 +274,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     importJson: (raw) => {
       const r = importStateJson(raw);
       if (!r.ok) return { ok: false as const, reason: r.reason };
+      skipPush.current = false;
       setState(r.state);
       return { ok: true as const };
     },
+    pushNow,
   };
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;

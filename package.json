@@ -5,12 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node server/dev-api.mjs",
+    "dev:all": "node server/dev-api.mjs & vite",
+    "db:migrate": "tsx scripts/migrate-seed.ts",
+    "db:seed": "tsx scripts/migrate-seed.ts --force",
+    "db:check": "node scripts/check-env.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "framer-motion": "^12.23.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -24,6 +30,7 @@
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.13",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^5.0.0"
