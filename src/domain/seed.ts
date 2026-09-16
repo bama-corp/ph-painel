@@ -18,6 +18,7 @@ export function seedState(): AppState {
       despesas: 20,
       lazer: 10,
     },
+    budgetMethodId: "ph-bolsos",
     accounts: [
       { id: "bai", entityId: "pessoal", name: "BAI", kind: "banco", opening: 111303.02 },
       { id: "bfa", entityId: "pessoal", name: "BFA", kind: "banco", opening: 10107.06 },
@@ -103,6 +104,9 @@ export function seedState(): AppState {
     recurring: [
       { id: "func-cw", entityId: "cw", name: "Funcionário", amount: 35000, nature: "fixo" },
       { id: "salario", entityId: "pessoal", name: "Salário GSA", amount: 220000, nature: "fixo" },
+    ],
+    incomeSources: [
+      { id: "gsa", name: "Salário GSA", amount: 220000, active: true },
     ],
     declared: {
       cwRevenueJuly: 86460,

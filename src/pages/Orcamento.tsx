@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  CUSTOM_BUDGET_METHOD_ID,
+  SPLIT_METHODS,
+  splitMethodById,
+} from "../domain/definicaoRules";
 import {
   allocatablePersonal,
   envelopeOf,
   envelopeSpentMes,
   envelopesTotal,
   personalOwnLiquidity,
+  plannedIncomeTotal,
   rulesOk,
   splitSalary,
 } from "../domain/engine";
@@ -23,11 +30,22 @@ const RULE_KEYS = [
 ] as const;
 
 export function Orcamento() {
-  const { state, setRules, allocate, distributeEntry } = useStore();
+  const {
+    state,
+    setRules,
+    setBudgetMethod,
+    allocate,
+    distributeEntry,
+    addIncomeSource,
+    setIncomeSource,
+    removeIncomeSource,
+  } = useStore();
   const [draft, setDraft] = useState<BudgetRules>(state.rules);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [entryRaw, setEntryRaw] = useState("");
   const [err, setErr] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newAmount, setNewAmount] = useState("");
 
   useEffect(() => {
     setDraft(state.rules);
@@ -36,12 +54,19 @@ export function Orcamento() {
   const ownLiq = personalOwnLiquidity(state);
   const nosBolsos = envelopesTotal(state);
   const u = allocatablePersonal(state);
-  const split = splitSalary(state.declared.salary, draft);
+  const planned = plannedIncomeTotal(state);
+  const split = splitSalary(planned, draft);
   const entryPreview = Number(String(entryRaw).replace(",", ".")) || 0;
   const entrySplit = entryPreview > 0 && rulesOk(state.rules) ? splitSalary(entryPreview, state.rules) : null;
   const ok = rulesOk(draft);
   const sumPct =
     draft.obrigacoes + draft.reserva + draft.investimento + draft.despesas + draft.lazer;
+  const sources = state.incomeSources ?? [];
+  const methodId = state.budgetMethodId ?? CUSTOM_BUDGET_METHOD_ID;
+  const methodLabel =
+    methodId === CUSTOM_BUDGET_METHOD_ID
+      ? "Personalizado"
+      : (splitMethodById(methodId)?.name ?? methodId);
 
   function onDistributeEntry() {
     const n = Number(String(entryRaw).replace(",", "."));
@@ -70,6 +95,18 @@ export function Orcamento() {
     setErr("");
   }
 
+  function onAddSource() {
+    const n = Number(String(newAmount).replace(",", "."));
+    const r = addIncomeSource({ name: newName, amount: n, active: true });
+    if (!r.ok) {
+      setErr(r.reason);
+      return;
+    }
+    setNewName("");
+    setNewAmount("");
+    setErr("");
+  }
+
   const splitByKey: Record<(typeof RULE_KEYS)[number][0], number> = {
     obrigacoes: split.obrigacoes,
     reserva: split.reserva,
@@ -78,16 +115,15 @@ export function Orcamento() {
     lazer: split.lazer,
   };
 
-  const flow: { label: string; pct: number | null }[] = [
-    { label: "Entrada", pct: null },
-    ...RULE_KEYS.map(([k, label]) => ({ label, pct: draft[k] as number })),
-  ];
-
   return (
     <div className="page">
       <PageHeader title="Orçamento pessoal" mark="pine">
-        Cada entrada própria tem função. Custódia e empresa não entram nos bolsos. Meter só sobre
-        capital pessoal alocável.
+        Fontes, percentagens dos bolsos e Meter. As regras de funcionamento (como usar cada categoria)
+        estão em{" "}
+        <Link to="/definicao" className="border-b border-ink/25 hover:border-ink">
+          Definição
+        </Link>
+        . Custódia e empresa não entram nos bolsos.
       </PageHeader>
 
       <dl className="mt-12 grid gap-8 border-y border-ink/12 py-8 sm:grid-cols-3">
@@ -101,27 +137,40 @@ export function Orcamento() {
         />
       </dl>
 
-      <ol className="mt-12 space-y-0 border-y border-ink/12 py-2">
-        {flow.map((step, i) => (
-          <li key={step.label}>
-            {i > 0 && (
-              <div className="flex items-center gap-3 py-1.5 pl-1" aria-hidden>
-                <span className="sep-line max-w-[1.25rem]" />
-                <span className="text-ink/25">↓</span>
-              </div>
-            )}
-            <div className="flex items-baseline justify-between gap-4 border-b border-ink/[0.06] py-2.5 last:border-0">
-              <span className="flex items-center gap-2.5 font-display text-lg tracking-tight sm:text-xl">
-                <span className="mark mark-soft" aria-hidden />
-                {step.label}
-              </span>
-              {step.pct !== null && <span className="num text-base font-semibold text-ink/55">{step.pct}%</span>}
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      <Section title="Regras" mark="pine" hint="Soma tem de ser 100%. Guarda antes de distribuir uma entrada.">
+      <Section
+        title="Percentagens dos bolsos"
+        mark="pine"
+        hint={
+          <>
+            Método activo: <strong className="font-medium text-ink/70">{methodLabel}</strong>
+            {" · "}
+            <Link to="/definicao" className="border-b border-ink/25 hover:border-ink">
+              mudar em Definição
+            </Link>
+            . Soma 100%. Guarda antes de distribuir.
+          </>
+        }
+      >
+        <div className="mb-5 flex flex-wrap gap-2">
+          {SPLIT_METHODS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className={
+                methodId === m.id
+                  ? "btn-ghost border-ink/25 bg-wash/80 text-ink"
+                  : "btn-ghost text-ink/50"
+              }
+              onClick={() => {
+                const r = setBudgetMethod(m.id);
+                if (!r.ok) setErr(r.reason);
+                else setErr("");
+              }}
+            >
+              {m.name}
+            </button>
+          ))}
+        </div>
         <div className="grid gap-5 sm:grid-cols-5">
           {RULE_KEYS.map(([k, label]) => (
             <label key={k} className="field-label">
@@ -149,16 +198,89 @@ export function Orcamento() {
       </Section>
 
       <Section
-        title="Se entrar o salário GSA"
+        title="Fontes de renda"
         mark="pine"
-        hint="Simulação com as regras do rascunho, não move dinheiro."
+        hint="Planeamento mensal (não move dinheiro). A simulação das regras usa a soma das activas."
       >
-        <div>
+        <ul className="space-y-0">
+          {sources.map((src) => (
+            <li
+              key={src.id}
+              className="flex flex-wrap items-end gap-3 border-b border-ink/[0.07] py-4 first:pt-0 last:border-0"
+            >
+              <label className="field-label min-w-[10rem] flex-1">
+                Nome
+                <input
+                  className="field text-sm font-normal normal-case tracking-normal text-ink"
+                  value={src.name}
+                  onChange={(e) => setIncomeSource(src.id, { name: e.target.value })}
+                />
+              </label>
+              <label className="field-label w-36">
+                Valor (Kz)
+                <input
+                  className="field num text-sm font-normal normal-case tracking-normal text-ink"
+                  inputMode="decimal"
+                  value={src.amount}
+                  onChange={(e) => {
+                    const n = Number(String(e.target.value).replace(",", "."));
+                    if (Number.isFinite(n) && n >= 0) setIncomeSource(src.id, { amount: n });
+                  }}
+                />
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-sm text-ink/60">
+                <input
+                  type="checkbox"
+                  checked={src.active}
+                  onChange={(e) => setIncomeSource(src.id, { active: e.target.checked })}
+                />
+                Activa
+              </label>
+              <button
+                type="button"
+                className="btn-ghost py-1.5 text-sm"
+                onClick={() => {
+                  const r = removeIncomeSource(src.id);
+                  if (!r.ok) setErr(r.reason);
+                }}
+              >
+                Remover
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="field-label min-w-[10rem] flex-1">
+            Nova fonte
+            <input
+              className="field text-sm font-normal normal-case tracking-normal text-ink"
+              placeholder="ex. Freelance"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </label>
+          <label className="field-label w-36">
+            Valor (Kz)
+            <input
+              className="field num text-sm font-normal normal-case tracking-normal text-ink"
+              inputMode="decimal"
+              placeholder="0"
+              value={newAmount}
+              onChange={(e) => setNewAmount(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost" onClick={onAddSource}>
+            Adicionar
+          </button>
+        </div>
+
+        <div className="mt-6">
           {RULE_KEYS.map(([k, label]) => (
             <Line key={k} k={label} n={splitByKey[k]} />
           ))}
-          <TotalRow label="Total" mark="pine">
-            <Money n={state.declared.salary} />
+          <TotalRow label="Renda planeada (activas)" mark="pine">
+            <Money n={planned} />
           </TotalRow>
         </div>
       </Section>

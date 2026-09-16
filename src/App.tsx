@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./ui/Shell";
 import { Eu } from "./pages/Eu";
+import { Definicao } from "./pages/Definicao";
 import { Orcamento } from "./pages/Orcamento";
 import { Contas } from "./pages/Contas";
 import { Cw } from "./pages/Cw";
@@ -15,6 +16,7 @@ export default function App() {
     <Shell>
       <Routes>
         <Route path="/" element={<Eu />} />
+        <Route path="/definicao" element={<Definicao />} />
         <Route path="/orcamento" element={<Orcamento />} />
         <Route path="/contas" element={<Contas />} />
         <Route path="/pds" element={<Cw />} />

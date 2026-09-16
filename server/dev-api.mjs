@@ -116,6 +116,15 @@ const server = createServer(async (req, res) => {
   }
 });
 
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`PH API já a correr em http://localhost:${PORT}/api/state (porta ocupada).`);
+    process.exit(0);
+  }
+  console.error(err);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`PH API (Neon) em http://localhost:${PORT}/api/state`);
 });

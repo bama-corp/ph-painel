@@ -104,7 +104,6 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         method,
         responsible,
         note,
-        envelopeId: entityId === "pessoal" ? envelopeId : undefined,
       });
     } else if (kind === "despesa") {
       if (!fromId) return setErr("Escolhe a conta de saída.");
@@ -148,14 +147,15 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         costNature: OWNER.includes(kind) ? "retirada" : undefined,
       });
     } else if (OWNER.includes(kind)) {
-      if (!fromId) return setErr("Conta de origem em falta.");
+      if (!fromId || !toId) return setErr("Origem e destino de liquidez obrigatórios.");
       r = addMovement({
         at,
         kind,
         amount: n,
         from: { type: "liquidity", id: fromId },
-        to: { type: "liquidity", id: toId || "caixa-p" },
+        to: { type: "liquidity", id: toId },
         entityId,
+        otherEntityId: toAcc?.entityId,
         method,
         responsible,
         note,

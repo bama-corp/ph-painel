@@ -1,6 +1,8 @@
 import { seedState } from "./seed";
-import type { AppState, OwnershipClass, Party } from "./types";
+import type { AppState, IncomeSource, OwnershipClass, Party } from "./types";
 import { SCHEMA_VERSION } from "./types";
+import { roundKz } from "./money";
+import { detectBudgetMethodId } from "./definicaoRules";
 
 export const STORAGE_KEY = "ph-painel-v3";
 export const CORRUPT_BACKUP_KEY = "ph-painel-v3-last-corrupt";
@@ -66,6 +68,15 @@ export function migrate(state: AppState): AppState {
   const extraAccounts = seed.accounts.filter((a) => !accountIds.has(a.id));
   const extraParties = seed.parties.filter((p) => !partyIds.has(p.id));
 
+  const incomeSources = migrateIncomeSources(state, seed);
+  const planned = roundKz(incomeSources.filter((s) => s.active).reduce((sum, s) => sum + s.amount, 0));
+  const declared = { ...(state.declared ?? seed.declared), salary: planned };
+  const rules = state.rules ?? seed.rules;
+  const budgetMethodId =
+    typeof state.budgetMethodId === "string" && state.budgetMethodId
+      ? state.budgetMethodId
+      : detectBudgetMethodId(rules);
+
   return {
     ...state,
     schemaVersion: SCHEMA_VERSION,
@@ -93,11 +104,26 @@ export function migrate(state: AppState): AppState {
     ],
     assets: (state.assets ?? []).map((a) => ({ ...a, name: rename[a.name] ?? a.name })),
     envelopes: state.envelopes?.length ? state.envelopes : seed.envelopes,
-    rules: state.rules ?? seed.rules,
-    declared: state.declared ?? seed.declared,
+    rules,
+    budgetMethodId,
+    declared,
     recurring: state.recurring ?? seed.recurring,
+    incomeSources,
     roveClients: state.roveClients ?? seed.roveClients,
   };
+}
+
+function migrateIncomeSources(state: AppState, seed: AppState): IncomeSource[] {
+  if (Array.isArray(state.incomeSources) && state.incomeSources.length > 0) {
+    return state.incomeSources.map((s) => ({
+      id: s.id,
+      name: String(s.name || "Fonte").trim() || "Fonte",
+      amount: roundKz(Number(s.amount) || 0),
+      active: s.active !== false,
+    }));
+  }
+  const salary = roundKz(state.declared?.salary ?? seed.declared.salary);
+  return [{ id: "gsa", name: "Salário GSA", amount: salary, active: true }];
 }
 
 export function loadState(): AppState {

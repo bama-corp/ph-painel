@@ -9,14 +9,19 @@ import {
   applyPartyCollection,
   partyHasLedgerMovements,
   partyOf,
+  syncDeclaredSalary,
   type AllocateResult,
   type MovementResult,
 } from "./engine";
 import { downloadStateJson, exportStateJson, importStateJson, loadState, STORAGE_KEY } from "./persist";
 import { fetchRemoteState, pushRemoteState } from "./remote";
 import { seedState } from "./seed";
-import type { AppState, BudgetRules, Movement, NotebookEntry, Party, RoveClient } from "./types";
-import { uid } from "./money";
+import {
+  applySplitMethodRules,
+  detectBudgetMethodId,
+} from "./definicaoRules";
+import type { AppState, BudgetRules, IncomeSource, Movement, NotebookEntry, Party, RoveClient } from "./types";
+import { roundKz, uid } from "./money";
 
 type Store = {
   state: AppState;
@@ -39,6 +44,7 @@ type Store = {
     note?: string;
   }) => MovementResult;
   setRules: (r: BudgetRules) => void;
+  setBudgetMethod: (methodId: string) => { ok: true } | { ok: false; reason: string };
   setParty: (id: string, patch: Partial<Party>) => void;
   addParty: (p: Omit<Party, "id">) => { ok: true; id: string } | { ok: false; reason: string };
   removeParty: (id: string) => { ok: true } | { ok: false; reason: string };
@@ -47,6 +53,9 @@ type Store = {
   addClient: (c: Omit<RoveClient, "id">) => void;
   allocate: (parts: { envelopeId: string; amount: number }[]) => AllocateResult;
   distributeEntry: (amount: number) => AllocateResult;
+  addIncomeSource: (draft: Omit<IncomeSource, "id">) => { ok: true; id: string } | { ok: false; reason: string };
+  setIncomeSource: (id: string, patch: Partial<Omit<IncomeSource, "id">>) => void;
+  removeIncomeSource: (id: string) => { ok: true } | { ok: false; reason: string };
   addNote: (n: Omit<NotebookEntry, "id">) => void;
   setNote: (id: string, patch: Partial<NotebookEntry>) => void;
   removeNote: (id: string) => void;
@@ -163,7 +172,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return result;
     },
-    setRules: (rules) => setState((s) => ({ ...s, rules })),
+    setRules: (rules) =>
+      setState((s) => ({
+        ...s,
+        rules,
+        budgetMethodId: detectBudgetMethodId(rules),
+      })),
+    setBudgetMethod: (methodId) => {
+      const applied = applySplitMethodRules(methodId);
+      if (!applied.ok) return { ok: false as const, reason: applied.reason };
+      setState((s) => ({
+        ...s,
+        rules: applied.rules,
+        budgetMethodId: applied.methodId,
+      }));
+      return { ok: true as const };
+    },
     setParty: (id, patch) =>
       setState((s) => {
         const { opening, ...rest } = patch;
@@ -251,6 +275,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setState((s) => {
         result = applyDistributeEntry(s, amount);
         return result.ok ? result.state : s;
+      });
+      return result;
+    },
+    addIncomeSource: (draft) => {
+      const name = draft.name.trim();
+      if (!name) return { ok: false as const, reason: "Indica o nome da fonte." };
+      if (!(draft.amount > 0)) return { ok: false as const, reason: "Valor tem de ser positivo." };
+      const id = uid("inc");
+      setState((s) =>
+        syncDeclaredSalary({
+          ...s,
+          incomeSources: [
+            ...(s.incomeSources ?? []),
+            { id, name, amount: roundKz(draft.amount), active: draft.active !== false },
+          ],
+        }),
+      );
+      return { ok: true as const, id };
+    },
+    setIncomeSource: (id, patch) =>
+      setState((s) =>
+        syncDeclaredSalary({
+          ...s,
+          incomeSources: (s.incomeSources ?? []).map((src) => {
+            if (src.id !== id) return src;
+            const next = { ...src, ...patch };
+            if (patch.name !== undefined) next.name = patch.name.trim() || src.name;
+            if (patch.amount !== undefined) next.amount = roundKz(patch.amount);
+            return next;
+          }),
+        }),
+      ),
+    removeIncomeSource: (id) => {
+      let result: { ok: true } | { ok: false; reason: string } = { ok: false, reason: "Estado indisponível." };
+      setState((s) => {
+        const list = s.incomeSources ?? [];
+        if (!list.some((x) => x.id === id)) {
+          result = { ok: false, reason: "Fonte inexistente." };
+          return s;
+        }
+        if (list.length <= 1) {
+          result = { ok: false, reason: "Mantém pelo menos uma fonte de renda." };
+          return s;
+        }
+        result = { ok: true };
+        return syncDeclaredSalary({
+          ...s,
+          incomeSources: list.filter((x) => x.id !== id),
+        });
       });
       return result;
     },

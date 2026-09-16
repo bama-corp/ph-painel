@@ -6,7 +6,7 @@ export const COMPANIES: Exclude<EntityId, "pessoal">[] = ["cw", "rove", "picasso
 export type OwnershipClass = "own" | "custody" | "company";
 
 /** Versão actual do schema persistido. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 export type MovementKind =
   | "receita"
@@ -139,7 +139,16 @@ export type Declared = {
   cwRevenueJuly: number;
   roveRevenue: number;
   roveProfit: number;
+  /** Compat: espelho de plannedIncomeTotal (soma das fontes activas). */
   salary: number;
+};
+
+/** Fonte de renda pessoal planeada (mensal). Não é movimento — é planeamento. */
+export type IncomeSource = {
+  id: string;
+  name: string;
+  amount: number;
+  active: boolean;
 };
 
 export type NotebookEntry = {
@@ -154,6 +163,8 @@ export type AppState = {
   asOf: string;
   month: string;
   rules: BudgetRules;
+  /** Método de divisão activo (`50-30-20`, `ph-bolsos`, `custom`, …). */
+  budgetMethodId: string;
   accounts: LiquidityAccount[];
   envelopes: Envelope[];
   parties: Party[];
@@ -161,6 +172,8 @@ export type AppState = {
   movements: Movement[];
   roveClients: RoveClient[];
   recurring: RecurringCost[];
+  /** Fontes de renda planeadas (GSA, freelance, …). Fonte de verdade do planeamento. */
+  incomeSources: IncomeSource[];
   declared: Declared;
   notes: NotebookEntry[];
 };
@@ -175,6 +188,7 @@ export type Alert = {
 };
 
 export type Decision = {
+  id: string;
   question: string;
   answer: string;
   detail: string;

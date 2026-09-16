@@ -6,6 +6,7 @@ import {
   buildDecisions,
   cfoMetrics,
   fluxoMes,
+  plannedIncomeTotal,
   spendablePersonal,
 } from "./engine";
 import { seedState } from "./seed";
@@ -23,7 +24,15 @@ describe("Passo 6 — CFO / Decisão", () => {
     expect(m.patrimonioLiquido).not.toBe(m.gastavel);
   });
 
-  it("Quanto posso gastar? usa só spendablePersonal, nunca liquidez bruta", () => {
+  it("seed: fila começa com alocar + dívida + custódia + gap renda (sem gastar ainda)", () => {
+    const ids = buildDecisions(seedState()).map((d) => d.id);
+    expect(ids[0]).toBe("alocar");
+    expect(ids).toContain("divida-propria");
+    expect(ids).toContain("custodia");
+    expect(ids).not.toContain("gastar");
+  });
+
+  it("Quanto posso gastar? só aparece após alocar; usa spendablePersonal", () => {
     let s = seedState();
     const funded = applyAllocate(s, [
       { envelopeId: "operacional", amount: 40_000 },
@@ -32,7 +41,6 @@ describe("Passo 6 — CFO / Decisão", () => {
     expect(funded.ok).toBe(true);
     if (!funded.ok) return;
     s = funded.state;
-    // esgotar alocável restante com reserva para isolar gastável
     const rest = applyAllocate(s, [{ envelopeId: "reserva", amount: cfoMetrics(s).alocavel }]);
     expect(rest.ok).toBe(true);
     if (!rest.ok) return;
@@ -43,16 +51,28 @@ describe("Passo 6 — CFO / Decisão", () => {
     expect(m.gastavel).toBe(50_000);
     expect(spendablePersonal(s)).toBe(50_000);
 
-    const gastar = buildDecisions(s).find((d) => d.question === "Quanto posso gastar?");
+    const gastar = buildDecisions(s).find((d) => d.id === "gastar");
     expect(gastar?.answer).toContain("50");
-    expect(gastar?.detail).not.toMatch(/património líquido.*teto de gasto/i);
+    expect(buildDecisions(s).some((d) => d.id === "alocar")).toBe(false);
   });
 
-  it("decisão não trata custódia Lenu como dívida própria prioritária misturada", () => {
+  it("dívida própria na fila não mistura custódia Lenu", () => {
     const s = seedState();
-    const divida = buildDecisions(s).find((d) => d.question.includes("dívida"));
+    const divida = buildDecisions(s).find((d) => d.id === "divida-propria");
     expect(divida?.detail).toMatch(/Custódia de terceiros/i);
-    expect(divida?.answer).toMatch(/Tuni|própria/i);
+    expect(divida?.answer).toMatch(/Tuni|própria|60/i);
+  });
+
+  it("plannedIncomeTotal soma fontes activas", () => {
+    const s = {
+      ...seedState(),
+      incomeSources: [
+        { id: "gsa", name: "Salário GSA", amount: 220_000, active: true },
+        { id: "free", name: "Freelance", amount: 50_000, active: true },
+        { id: "off", name: "Inactiva", amount: 99_000, active: false },
+      ],
+    };
+    expect(plannedIncomeTotal(s)).toBe(270_000);
   });
 });
 
@@ -88,7 +108,7 @@ describe("Passo 7 — fluxo mensal", () => {
     const tr = applyAddMovement(s, {
       at: "2026-08-20",
       kind: "transferencia",
-      amount: 200,
+      amount: 500,
       from: { type: "liquidity", id: "bai" },
       to: { type: "liquidity", id: "bfa" },
       entityId: "pessoal",
@@ -100,18 +120,16 @@ describe("Passo 7 — fluxo mensal", () => {
     const pay = applyPartyPayment(s, {
       partyId: "tuni-pag",
       accountId: "bai",
-      amount: 5000,
+      amount: 2000,
       at: "2026-08-20",
     });
     expect(pay.ok).toBe(true);
     if (!pay.ok) return;
     s = pay.state;
 
-    const f = fluxoMes(s, "2026-08");
+    const f = fluxoMes(s);
     expect(f.despesas).toBe(1000);
-    expect(f.transferencias).toBe(200);
-    expect(f.dividasPagas).toBe(5000);
-    expect(f.investimentos).toBe(0);
-    expect(f.interempresa).toBe(0);
+    expect(f.transferencias).toBe(500);
+    expect(f.dividasPagas).toBe(2000);
   });
 });

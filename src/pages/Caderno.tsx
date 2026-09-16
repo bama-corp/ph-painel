@@ -10,7 +10,7 @@ const REGRAS = [
   },
   {
     t: "Banco ≠ bolso",
-    d: "Contas mostram onde o dinheiro vive. Orçamento define o que ele pode fazer (operacional, reserva, investimento, lazer, projectos).",
+    d: "Contas mostram onde o dinheiro vive. Orçamento dá percentagens e Meter. Definição explica as regras de cada categoria.",
   },
   {
     t: "Toda entrada pessoal tem função",
@@ -51,7 +51,8 @@ const RITMO = [
 
 const MENUS = [
   { to: "/", label: "Eu", d: "Visão geral. De quem é o dinheiro." },
-  { to: "/orcamento", label: "Orçamento", d: "Regras e bolsos. Dá função." },
+  { to: "/definicao", label: "Definição", d: "Regras de funcionamento do painel." },
+  { to: "/orcamento", label: "Orçamento", d: "Fontes, % dos bolsos e Meter." },
   { to: "/contas", label: "Contas", d: "Bancos, a receber, a pagar." },
   { to: "/pds", label: "PDS", d: "Caixa e operação PADStation." },
   { to: "/plural", label: "Plural", d: "Recorrência e clientes." },

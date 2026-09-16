@@ -90,7 +90,7 @@ export function envelopeOf(state: AppState, envelopeId: string) {
     }
     if (m.envelopeId === envelopeId && m.kind === "despesa") n -= m.amount;
     if (m.envelopeId === envelopeId && m.kind === "investimento_proprietario") n -= m.amount;
-    if (m.envelopeId === envelopeId && m.kind === "receita") n += m.amount;
+    // Receita NÃO credita bolsos — só alocacao (Meter). Evita inventar spendable sem cash.
   }
   return roundKz(n);
 }
@@ -284,7 +284,9 @@ export function patrimonioPessoal(state: AppState) {
   const dividasOwn = partiesSum(state, "pessoal", "pagar", "own");
   const dividas = partiesSum(state, "pessoal", "pagar");
   const receber = partiesSum(state, "pessoal", "receber", "own");
-  const liquido = roundKz(dinheiro + bens + participacoes + receber - dividas);
+  /** Empréstimo empresa→proprietário: cash pessoal sobe, mas owner_current (a receber na empresa) é dívida do dono. */
+  const dividaOwnerEmpresa = ownerCurrent(state);
+  const liquido = roundKz(dinheiro + bens + participacoes + receber - dividas - dividaOwnerEmpresa);
   return {
     dinheiro,
     proprio,
@@ -294,6 +296,7 @@ export function patrimonioPessoal(state: AppState) {
     dividas,
     dividasOwn,
     receber,
+    dividaOwnerEmpresa,
     liquido,
   };
 }
@@ -528,6 +531,20 @@ export function splitSalary(amount: number, rules: BudgetRules) {
   return { obrigacoes: a, reserva: r, investimento: i, despesas: d, lazer: l };
 }
 
+/** Soma das fontes de renda pessoais activas (planeamento mensal). */
+export function plannedIncomeTotal(state: AppState) {
+  return roundKz(
+    (state.incomeSources ?? []).filter((s) => s.active).reduce((sum, s) => sum + s.amount, 0),
+  );
+}
+
+/** Mantém declared.salary = plannedIncomeTotal (compat). */
+export function syncDeclaredSalary(state: AppState): AppState {
+  const total = plannedIncomeTotal(state);
+  if (state.declared.salary === total) return state;
+  return { ...state, declared: { ...state.declared, salary: total } };
+}
+
 /** Partes de alocação a partir das BudgetRules guardadas (não draft de UI). */
 export function partsFromRules(amount: number, rules: BudgetRules) {
   const s = splitSalary(amount, rules);
@@ -636,6 +653,66 @@ function accountEntity(state: AppState, ep: Endpoint): EntityId | null {
 export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Movement): string | null {
   if (!(m.amount > 0)) return "Valor inválido.";
 
+  // C2: alocação só via applyAllocate / Meter (tecto allocatable).
+  if (m.kind === "alocacao") {
+    return "Alocação só pelo Meter / applyAllocate — não via movimento livre.";
+  }
+
+  // C3/C4: parties só pelos kinds atómicos.
+  if (m.kind !== "pagamento_party" && m.kind !== "cobranca_party") {
+    if (m.from.type === "party" || m.to.type === "party") {
+      return "Parties só via pagamento_party / cobranca_party (atómicos com caixa).";
+    }
+  }
+
+  // C1: receita nunca aloca a bolsos — cash → liquidez, função → Meter/applyAllocate.
+  if (m.kind === "receita") {
+    if (m.envelopeId) {
+      return "Receita não aloca a bolsos. Credita liquidez e usa Meter / alocação.";
+    }
+    if (m.to.type === "envelope" || m.from.type === "envelope") {
+      return "Receita não mexe em bolsos. Usa alocação.";
+    }
+    // C7: receita same-entity (world→liquidez OK; liquidez só da própria entidade).
+    if (m.from.type === "liquidity") {
+      const fromE = accountEntity(state, m.from);
+      if (!fromE) return "Conta de origem inválida.";
+      if (fromE !== m.entityId) {
+        return "Receita cross-entity rejeitada. Usa empréstimo, pró-labore, distribuição ou reembolso.";
+      }
+    }
+    if (m.to.type === "liquidity") {
+      const toE = accountEntity(state, m.to);
+      if (!toE) return "Conta de destino inválida.";
+      if (toE !== m.entityId) {
+        return "Receita cross-entity rejeitada. Usa empréstimo, pró-labore, distribuição ou reembolso.";
+      }
+    }
+  }
+
+  if (m.kind === "ajuste") {
+    // Ajuste auditado: só world ↔ liquidez (postLiquidityAdjustment).
+    const okPair =
+      (m.from.type === "world" && m.to.type === "liquidity") ||
+      (m.from.type === "liquidity" && m.to.type === "world");
+    if (!okPair) {
+      return "Ajuste só entre world e liquidez. Parties: pagamento/cobrança; bolsos: Meter.";
+    }
+  }
+
+  // C6 + owner kinds: from/to liquidez obrigatórios (sem inventar cash via party).
+  if (OWNER_KINDS.includes(m.kind)) {
+    if (m.from.type !== "liquidity" || m.to.type !== "liquidity") {
+      return `${KIND_LABEL[m.kind]} exige duas contas de liquidez.`;
+    }
+    const fromE = accountEntity(state, m.from);
+    const toE = accountEntity(state, m.to);
+    if (!fromE || !toE) return "Contas inválidas.";
+    if (fromE === toE) {
+      return `${KIND_LABEL[m.kind]} tem de cruzar entidades (empresa ↔ pessoal).`;
+    }
+  }
+
   if (m.kind === "transferencia") {
     if (m.from.type !== "liquidity" || m.to.type !== "liquidity") {
       return "Transferência exige duas contas de liquidez.";
@@ -650,7 +727,6 @@ export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Move
       return "A entidade do movimento deve coincidir com a das contas.";
     }
     if (m.from.id === m.to.id) return "Origem e destino iguais.";
-    return null;
   }
 
   if (m.kind === "interempresa") {
@@ -661,7 +737,6 @@ export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Move
     const toE = accountEntity(state, m.to);
     if (!fromE || !toE) return "Contas inválidas.";
     if (fromE === toE) return "Interempresa tem de cruzar duas entidades diferentes.";
-    return null;
   }
 
   if (m.kind === "despesa" && m.entityId === "pessoal") {
@@ -687,7 +762,6 @@ export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Move
     if (m.from.type !== "liquidity" || m.to.type !== "party") {
       return "Pagamento de party: saída de liquidez → party.";
     }
-    const fromId = m.from.id;
     const partyId = m.to.id;
     const party = state.parties.find((p) => p.id === partyId);
     if (!party) return "Party inexistente.";
@@ -696,11 +770,6 @@ export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Move
     if (m.amount > due + 0.001) {
       return `Valor acima do saldo da party (${due.toLocaleString("pt-PT")} Kz).`;
     }
-    const cash = liquidityOf(state, fromId);
-    if (m.amount > cash + 0.001) {
-      return `Liquidez insuficiente na conta (${cash.toLocaleString("pt-PT")} Kz).`;
-    }
-    return null;
   }
 
   if (m.kind === "cobranca_party") {
@@ -715,7 +784,14 @@ export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Move
     if (m.amount > due + 0.001) {
       return `Valor acima do a receber (${due.toLocaleString("pt-PT")} Kz).`;
     }
-    return null;
+  }
+
+  // C5: sem overdraft — qualquer saída de liquidez exige saldo.
+  if (m.from.type === "liquidity") {
+    const cash = liquidityOf(state, m.from.id);
+    if (m.amount > cash + 0.001) {
+      return `Liquidez insuficiente na conta (${cash.toLocaleString("pt-PT")} Kz).`;
+    }
   }
 
   return null;
@@ -805,88 +881,118 @@ export function applyPartyCollection(
 
 export function buildDecisions(state: AppState): Decision[] {
   const m = cfoMetrics(state);
-  const split = splitSalary(state.declared.salary, state.rules);
   const fluxo = fluxoMes(state);
-  const tectoGastoPlaneado = split.despesas + split.lazer;
-  const over = fluxo.despesas > tectoGastoPlaneado && fluxo.despesas > 0;
+  const planned = plannedIncomeTotal(state);
+  const basePlaneamento = fluxo.entradas > 0 ? fluxo.entradas : planned;
+  const split = splitSalary(basePlaneamento, state.rules);
+  const tectoGasto = split.despesas + split.lazer;
+  const over = fluxo.despesas > tectoGasto && fluxo.despesas > 0;
+  const out: Decision[] = [];
 
-  const gastar: Decision = {
-    question: "Quanto posso gastar?",
-    answer: m.alocavel > 1 ? "Ainda não — há capital próprio sem função." : kzAnswer(m.gastavel),
-    detail:
-      m.alocavel > 1
-        ? `Há ${m.alocavel.toLocaleString("pt-PT")} Kz alocáveis (próprios). Liquidez bruta (${m.liquidezBrutaPessoal.toLocaleString("pt-PT")} Kz) e património líquido não são teto de gasto. Custódia (${m.custodia.toLocaleString("pt-PT")} Kz) está excluída. Aloca primeiro.`
-        : `Gastável = operacional + lazer = ${m.gastavel.toLocaleString("pt-PT")} Kz. Reserva ${m.reservado.toLocaleString("pt-PT")} · investível ${m.investivel.toLocaleString("pt-PT")} · custódia ${m.custodia.toLocaleString("pt-PT")} — não gastáveis.`,
-    tone: m.alocavel > 1 ? "bad" : m.gastavel > 0 ? "ok" : "warn",
-  };
+  // 1 — Alocar capital próprio
+  if (m.alocavel > 1) {
+    out.push({
+      id: "alocar",
+      question: "O que faço primeiro?",
+      answer: `Aloca ${kzAnswer(m.alocavel)} de capital próprio.`,
+      detail: `Há dinheiro teu sem função. Liquidez bruta (${m.liquidezBrutaPessoal.toLocaleString("pt-PT")} Kz) e património líquido não são teto de gasto. Custódia (${m.custodia.toLocaleString("pt-PT")} Kz) está excluída. Usa Meter ou «Distribuir esta entrada» no Orçamento.`,
+      tone: "bad",
+    });
+  }
 
-  const reservar: Decision = {
-    question: "Quanto devo reservar?",
-    answer: kzAnswer(split.reserva),
-    detail: `Regra: ${state.rules.reserva}% de cada entrada própria. Simulação salário GSA ${state.declared.salary.toLocaleString("pt-PT")} Kz → ${split.reserva.toLocaleString("pt-PT")} Kz (não é entrada real do mês). Bolso reserva hoje: ${m.reservado.toLocaleString("pt-PT")} Kz.`,
-    tone: m.reservado < split.reserva ? "warn" : "ok",
-  };
+  // 2 — Conta corrente PDS
+  if (m.contaCorrenteProprietario > 0) {
+    out.push({
+      id: "reembolso-pds",
+      question: "Devo à PDS?",
+      answer: `Sim — ${kzAnswer(m.contaCorrenteProprietario)} na conta corrente.`,
+      detail: "Devolver = reembolso, não investimento nem pró-labore. A caixa da empresa não “desapareceu”.",
+      tone: "warn",
+    });
+  }
 
-  const investir: Decision = {
-    question: "Quanto devo investir?",
-    answer: kzAnswer(m.investivel > 0 ? m.investivel : split.investimento),
-    detail: `Investível agora (bolso): ${m.investivel.toLocaleString("pt-PT")} Kz. Regra ${state.rules.investimento}% sobre entradas. Só daqui sai capital para empresas — nunca da caixa delas nem do operacional.`,
-    tone: "info",
-  };
+  // 3 — Dívida própria
+  if (m.dividaPropria > 0) {
+    const tuni = partyOf(state, "tuni-pag");
+    out.push({
+      id: "divida-propria",
+      question: "Tenho dívida própria prioritária?",
+      answer: `Sim — ${kzAnswer(m.dividaPropria)}${tuni > 0 ? ` (ex. Tuni ${tuni.toLocaleString("pt-PT")} Kz)` : ""}.`,
+      detail: `Dívida própria: ${m.dividaPropria.toLocaleString("pt-PT")} Kz. Custódia de terceiros (${m.dividaTerceiros.toLocaleString("pt-PT")} Kz) não é tua dívida a juros, mas não é gastável.`,
+      tone: "warn",
+    });
+  }
 
-  const tuni = partyOf(state, "tuni-pag");
-  const divida: Decision = {
-    question: "Tenho alguma dívida prioritária?",
-    answer:
-      m.contaCorrenteProprietario > 0
-        ? `Sim — ${m.contaCorrenteProprietario.toLocaleString("pt-PT")} Kz conta corrente PDS.`
-        : m.dividaPropria > 0
-          ? `Sim — ${m.dividaPropria.toLocaleString("pt-PT")} Kz dívida própria (ex. Tuni ${tuni.toLocaleString("pt-PT")}).`
-          : "Nenhuma dívida própria em aberto.",
-    detail: `Dívida própria: ${m.dividaPropria.toLocaleString("pt-PT")} Kz. Custódia de terceiros: ${m.dividaTerceiros.toLocaleString("pt-PT")} Kz (não é tua dívida a juros, mas não é gastável). Empresa em caixa: ${m.empresa.toLocaleString("pt-PT")} Kz.`,
-    tone: m.contaCorrenteProprietario > 0 || m.dividaPropria > 0 ? "warn" : "info",
-  };
+  // 4 — Custódia
+  if (m.custodia > 0) {
+    out.push({
+      id: "custodia",
+      question: "Posso gastar a custódia?",
+      answer: "Não.",
+      detail: `${m.custodia.toLocaleString("pt-PT")} Kz de terceiros (Lenu, Eduardo, …) estão na liquidez bruta mas fora do teu capital. Não entram no Meter nem no gastável.`,
+      tone: "info",
+    });
+  }
 
-  const podeCw: Decision = {
-    question: "Posso investir na PDS?",
-    answer:
-      m.alocavel > 1
-        ? "Ainda não — aloca o próprio primeiro."
-        : m.investivel > 0
-          ? "Só com o bolso investimento."
-          : "Não: bolso investimento vazio.",
-    detail:
-      m.contaCorrenteProprietario > 0
-        ? `Antes de meter mais capital: ${m.contaCorrenteProprietario.toLocaleString("pt-PT")} Kz na conta corrente. Devolver = reembolso, não investimento.`
-        : "Investimento do proprietário ≠ empréstimo ≠ pró-labore. O movimento tem de escolher o tipo.",
-    tone: m.contaCorrenteProprietario > 0 ? "warn" : "info",
-  };
+  // 5 — Gastável (só quando já alocou)
+  if (m.alocavel <= 1) {
+    out.push({
+      id: "gastar",
+      question: "Quanto posso gastar?",
+      answer: kzAnswer(m.gastavel),
+      detail: `Gastável = operacional + lazer = ${m.gastavel.toLocaleString("pt-PT")} Kz. Reserva ${m.reservado.toLocaleString("pt-PT")} · investível ${m.investivel.toLocaleString("pt-PT")} — não gastáveis.`,
+      tone: m.gastavel > 0 ? "ok" : "warn",
+    });
+  }
 
-  const podeRove: Decision = {
-    question: "Posso colocar dinheiro na Plural?",
-    answer:
-      m.alocavel > 1
-        ? "Ainda não."
-        : m.investivel > 0
-          ? "Sim, como investimento do proprietário — não como despesa pessoal."
-          : "Não: bolso investimento vazio.",
-    detail: "Capital novo deve ir para estabilidade e cobrança. Caixa Plural não é bolso pessoal.",
-    tone: "info",
-  };
+  // 6 — Investir (só com bolso)
+  if (m.investivel > 0) {
+    out.push({
+      id: "investir",
+      question: "Posso meter dinheiro nas empresas?",
+      answer: `Sim — até ${kzAnswer(m.investivel)} do bolso investimento.`,
+      detail: "PDS ou Plural: investimento do proprietário. Nunca da caixa delas nem do operacional/lazer.",
+      tone: "info",
+    });
+  }
 
-  const acima: Decision = {
-    question: "Estou a gastar acima do planeado?",
-    answer:
-      fluxo.despesas === 0
-        ? "Ainda não há despesas pessoais reais neste mês."
-        : over
-          ? "Sim."
-          : "Não, dentro do tecto simulado.",
-    detail: `Despesas reais do mês: ${fluxo.despesas.toLocaleString("pt-PT")} Kz (não o salário declarado). Entradas reais: ${fluxo.entradas.toLocaleString("pt-PT")} Kz · pagamentos de dívida: ${fluxo.dividasPagas.toLocaleString("pt-PT")} · interempresa: ${fluxo.interempresa.toLocaleString("pt-PT")}. Tecto simulado (regras × salário GSA): ${tectoGastoPlaneado.toLocaleString("pt-PT")} Kz.`,
-    tone: over ? "bad" : "ok",
-  };
+  // 7 — Acima do planeado
+  if (fluxo.despesas > 0) {
+    out.push({
+      id: "acima",
+      question: "Estou a gastar acima do planeado?",
+      answer: over ? "Sim." : "Não, dentro do tecto.",
+      detail: `Despesas reais: ${fluxo.despesas.toLocaleString("pt-PT")} Kz. Tecto (regras × ${fluxo.entradas > 0 ? "entradas reais" : "renda planeada"} ${basePlaneamento.toLocaleString("pt-PT")} Kz): ${tectoGasto.toLocaleString("pt-PT")} Kz. Entradas reais do mês: ${fluxo.entradas.toLocaleString("pt-PT")} Kz.`,
+      tone: over ? "bad" : "ok",
+    });
+  }
 
-  return [gastar, reservar, investir, divida, podeCw, podeRove, acima];
+  // 8 — Planeado ≠ recebido
+  if (planned > 0 && Math.abs(fluxo.entradas - planned) > 1_000) {
+    out.push({
+      id: "renda-gap",
+      question: "A renda do mês bate com o plano?",
+      answer:
+        fluxo.entradas === 0
+          ? `Ainda sem entradas reais — plano ${kzAnswer(planned)}.`
+          : `Não — recebido ${kzAnswer(fluxo.entradas)} vs plano ${kzAnswer(planned)}.`,
+      detail: "Fontes de renda no Orçamento são planeamento. Entradas reais = movimentos de receita pessoal deste mês.",
+      tone: fluxo.entradas === 0 ? "info" : "warn",
+    });
+  }
+
+  // 9 — Fallback
+  if (out.length === 0) {
+    out.push({
+      id: "ok",
+      question: "O que faço agora?",
+      answer: "Nada urgente.",
+      detail: `Gastável ${m.gastavel.toLocaleString("pt-PT")} Kz · alocável ${m.alocavel.toLocaleString("pt-PT")} · renda planeada ${planned.toLocaleString("pt-PT")} · entradas reais ${fluxo.entradas.toLocaleString("pt-PT")}.`,
+      tone: "ok",
+    });
+  }
+
+  return out;
 }
 
 function kzAnswer(n: number) {

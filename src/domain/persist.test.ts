@@ -45,6 +45,24 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(next.accounts.some((a) => a.id === "bai")).toBe(true);
   });
 
+  it("migrate v4→v5 cria incomeSources a partir de declared.salary", () => {
+    const legacy = {
+      ...seedState(),
+      schemaVersion: 4,
+      incomeSources: undefined,
+      budgetMethodId: undefined,
+      declared: { ...seedState().declared, salary: 220_000 },
+    } as unknown as AppState;
+
+    const next = migrate(legacy);
+    expect(next.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(next.incomeSources).toHaveLength(1);
+    expect(next.incomeSources[0]?.id).toBe("gsa");
+    expect(next.incomeSources[0]?.amount).toBe(220_000);
+    expect(next.declared.salary).toBe(220_000);
+    expect(next.budgetMethodId).toBe("ph-bolsos");
+  });
+
   it("export JSON inclui schemaVersion e preserva seed numbers", () => {
     const s = seedState();
     const json = exportStateJson(s);
@@ -53,5 +71,6 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(parsed.exportedAt).toBeTruthy();
     expect(parsed.parties.find((p) => p.id === "lenu")?.opening).toBe(437600);
     expect(parsed.accounts.find((a) => a.id === "stand")?.opening).toBe(1_000_000);
+    expect(parsed.incomeSources?.[0]?.amount).toBe(220_000);
   });
 });

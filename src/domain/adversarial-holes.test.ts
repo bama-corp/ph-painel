@@ -1,7 +1,5 @@
 /**
- * Adversarial reproduction harness — documents holes, does NOT assert they are fixed.
- * These tests EXPECT current broken behavior where marked with `documentsHole`.
- * When holes are fixed, flip to expect rejection / invariant hold.
+ * Adversarial harness — buracos C1–H8 fechados: esperam rejeição / invariante.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -19,7 +17,7 @@ import {
 } from "./engine";
 import { seedState } from "./seed";
 
-describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
+describe("ADVERSARIAL — buracos fechados", () => {
   it("SEED métricas base", () => {
     const m = cfoMetrics(seedState());
     expect(m.liquidezBrutaPessoal).toBeCloseTo(1_182_710.08, 2);
@@ -29,7 +27,7 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
     expect(m.gastavel).toBe(0);
   });
 
-  it("HOLE C1: receita world→world + envelopeId inventa spendable sem cash", () => {
+  it("FIXED C1: receita + envelopeId rejeitada (não inventa spendable)", () => {
     const s = seedState();
     const r = applyAddMovement(s, {
       at: "2026-08-20",
@@ -40,14 +38,13 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       entityId: "pessoal",
       envelopeId: "lazer",
     });
-    // Documenta o buraco: hoje ACEITA
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(spendablePersonal(r.state)).toBe(50_000);
-    expect(liquidityOf(r.state, "bai")).toBe(liquidityOf(s, "bai"));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/não aloca|bolsos/i);
+    expect(spendablePersonal(s)).toBe(0);
   });
 
-  it("HOLE C2: alocacao via applyAddMovement bypassa tecto allocatable", () => {
+  it("FIXED C2: alocacao via applyAddMovement rejeitada", () => {
     const s = seedState();
     const r = applyAddMovement(s, {
       at: "2026-08-20",
@@ -58,12 +55,13 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       entityId: "pessoal",
       envelopeId: "lazer",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(spendablePersonal(r.state)).toBe(999_999_999);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/Meter|applyAllocate/i);
+    expect(spendablePersonal(s)).toBe(0);
   });
 
-  it("HOLE C3: ajuste from party Lenu limpa custody sem retirar cash → own sobe", () => {
+  it("FIXED C3: ajuste from party rejeitado", () => {
     const s = seedState();
     const ownBefore = personalOwnLiquidity(s);
     const r = applyAddMovement(s, {
@@ -74,15 +72,14 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       to: { type: "world" },
       entityId: "pessoal",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(partyOf(r.state, "lenu")).toBe(0);
-    expect(liquidityOf(r.state, "stand")).toBe(liquidityOf(s, "stand"));
-    expect(personalOwnLiquidity(r.state)).toBeCloseTo(ownBefore + 437_600, 2);
-    expect(allocatablePersonal(r.state)).toBeCloseTo(allocatablePersonal(s) + 437_600, 2);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/pagamento_party|cobranca_party|Parties/i);
+    expect(partyOf(s, "lenu")).toBe(437_600);
+    expect(personalOwnLiquidity(s)).toBeCloseTo(ownBefore, 2);
   });
 
-  it("HOLE C4: despesa from party Tuni apaga dívida sem cash", () => {
+  it("FIXED C4: despesa from party rejeitada", () => {
     const funded = applyAllocate(seedState(), [{ envelopeId: "operacional", amount: 60_000 }]);
     expect(funded.ok).toBe(true);
     if (!funded.ok) return;
@@ -95,14 +92,15 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       entityId: "pessoal",
       envelopeId: "operacional",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(partyOf(r.state, "tuni-pag")).toBe(0);
-    expect(liquidityOf(r.state, "bai")).toBe(liquidityOf(funded.state, "bai"));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/pagamento_party|cobranca_party|Parties/i);
+    expect(partyOf(funded.state, "tuni-pag")).toBe(60_000);
   });
 
-  it("HOLE C5: despesa empresa permite overdraft (cria dinheiro negativo)", () => {
+  it("FIXED C5: despesa empresa sem overdraft", () => {
     const s = seedState();
+    const cash = liquidityOf(s, "cw-caixa");
     const r = applyAddMovement(s, {
       at: "2026-08-20",
       kind: "despesa",
@@ -111,12 +109,13 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       to: { type: "world" },
       entityId: "cw",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(liquidityOf(r.state, "cw-caixa")).toBeLessThan(0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/insuficiente/i);
+    expect(liquidityOf(s, "cw-caixa")).toBe(cash);
   });
 
-  it("HOLE C6: emprestimo from party→caixa-p cria cash sem sair da empresa", () => {
+  it("FIXED C6: emprestimo from party rejeitado", () => {
     const s = seedState();
     const r = applyAddMovement(s, {
       at: "2026-08-20",
@@ -126,13 +125,13 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       to: { type: "liquidity", id: "caixa-p" },
       entityId: "cw",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(liquidityOf(r.state, "caixa-p")).toBe(liquidityOf(s, "caixa-p") + 1_000);
-    expect(liquidityOf(r.state, "cw-caixa")).toBe(liquidityOf(s, "cw-caixa"));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/Parties|liquidez/i);
+    expect(liquidityOf(s, "caixa-p")).toBe(liquidityOf(seedState(), "caixa-p"));
   });
 
-  it("HOLE C7: company→pessoal como receita + envelope aumenta spendable", () => {
+  it("FIXED C7: receita company→pessoal rejeitada", () => {
     const s = seedState();
     const r = applyAddMovement(s, {
       at: "2026-08-20",
@@ -141,16 +140,15 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
       from: { type: "liquidity", id: "cw-caixa" },
       to: { type: "liquidity", id: "caixa-p" },
       entityId: "pessoal",
-      envelopeId: "operacional",
     });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(spendablePersonal(r.state)).toBe(5_000);
-    expect(liquidityOf(r.state, "cw-caixa")).toBe(liquidityOf(s, "cw-caixa") - 5_000);
-    expect(liquidityOf(r.state, "caixa-p")).toBe(liquidityOf(s, "caixa-p") + 5_000);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/cross-entity/i);
+    expect(liquidityOf(s, "cw-caixa")).toBe(liquidityOf(seedState(), "cw-caixa"));
+    expect(spendablePersonal(s)).toBe(0);
   });
 
-  it("HOLE H8: emprestimo_proprietario liquidez→liquidez inflaciona netWorth pessoal", () => {
+  it("FIXED H8: emprestimo liquidez→liquidez não inflaciona netWorth", () => {
     const s = seedState();
     const nw0 = netWorth(s);
     const r = applyAddMovement(s, {
@@ -164,8 +162,8 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(netWorth(r.state)).toBeCloseTo(nw0 + 10_000, 2);
     expect(partyOf(r.state, "emanuel-cw")).toBe(10_000);
+    expect(netWorth(r.state)).toBeCloseTo(nw0, 2);
   });
 
   it("CONTROLO: applyAllocate NÃO permite meter custody (tecto = own)", () => {
@@ -176,9 +174,9 @@ describe("ADVERSARIAL — reprodução de buracos (documentação)", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("CONTROLO: CFO seed — gastável 0 apesar de 1.18M bruto", () => {
-    const gastar = buildDecisions(seedState()).find((d) => d.question === "Quanto posso gastar?");
-    expect(gastar?.answer).toMatch(/ainda não|sem função/i);
+  it("CONTROLO: CFO seed — gastável 0; fila pede alocar primeiro", () => {
+    const decisions = buildDecisions(seedState());
+    expect(decisions[0]?.id).toBe("alocar");
     expect(cfoMetrics(seedState()).gastavel).toBe(0);
   });
 });

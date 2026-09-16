@@ -1,4 +1,4 @@
-import { buildAlerts, buildDecisions, splitSalary } from "../domain/engine";
+import { buildAlerts, buildDecisions, plannedIncomeTotal, splitSalary } from "../domain/engine";
 import { kz } from "../domain/money";
 import { useStore } from "../domain/store";
 import { Link } from "react-router-dom";
@@ -8,29 +8,35 @@ export function Decisao() {
   const { state } = useStore();
   const decisions = buildDecisions(state);
   const alerts = buildAlerts(state);
-  const split = splitSalary(state.declared.salary, state.rules);
+  const planned = plannedIncomeTotal(state);
+  const split = splitSalary(planned, state.rules);
+  const sourceNames = (state.incomeSources ?? [])
+    .filter((s) => s.active)
+    .map((s) => s.name)
+    .join(", ");
 
   return (
     <div className="page">
       <PageHeader title="O que faço com o dinheiro?">
-        Camada 4. Não é um extrato. É o CFO: regras + contas + dívidas, numa resposta.
+        Camada 4. Fila pelo teu estado — só o que importa agora, com regras + contas + dívidas.
       </PageHeader>
 
       <p className="mt-10 flex gap-3 border border-ink/12 bg-wash/50 p-4 text-sm leading-relaxed text-ink/55">
         <Mark tone="copper" />
         <span>
-          Quando entram {kz(state.declared.salary, 0)} de salário GSA, as regras actuais partem assim:
+          Com as tuas fontes activas
+          {sourceNames ? ` (${sourceNames})` : ""} — soma {kz(planned, 0)} — as regras partem assim:
           obrigações {kz(split.obrigacoes)} · reserva {kz(split.reserva)} · investimento{" "}
           {kz(split.investimento)} · despesas {kz(split.despesas)} · lazer {kz(split.lazer)}.{" "}
           <Link to="/orcamento" className="border-b border-ink/25 hover:border-ink">
-            Alterar regras
+            Fontes e regras
           </Link>
         </span>
       </p>
 
       <ol className="mt-14 space-y-0">
         {decisions.map((d, i) => (
-          <li key={d.question} className="border-b border-ink/10 py-8 first:pt-0">
+          <li key={d.id} className="border-b border-ink/10 py-8 first:pt-0">
             <p className="eyebrow flex items-center gap-2">
               <Mark tone="soft" />
               {String(i + 1).padStart(2, "0")} · {d.question}

@@ -96,6 +96,7 @@ export const ENTITY_FILTER_OPTIONS = [
 /** Nav: Eu → pessoal/empresas → registo/decisão. */
 export const NAV_LINKS = [
   { to: "/", label: "Eu" },
+  { to: "/definicao", label: "Definição" },
   { to: "/orcamento", label: "Orçamento" },
   { to: "/contas", label: "Contas" },
   ...COMPANIES.map((id) => ({ to: ENTITY[id].path, label: ENTITY[id].short })),
