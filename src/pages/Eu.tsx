@@ -6,25 +6,26 @@ import {
   fluxoMes,
   liquidityByEntity,
   liquidityOf,
+  lucroMes,
   ownerCurrent,
   patrimonioPessoal,
   receitaMes,
-  lucroMes,
   unallocated,
 } from "../domain/engine";
+import { COMPANIES } from "../domain/types";
+import { ENTITY, type EntityTone } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
 import { Money } from "../ui/Money";
-import { Mark, Section, Sep } from "../ui/Page";
+import { Mark, Section, Sep, TotalRow, type MarkTone } from "../ui/Page";
 
 export function Eu() {
   const { state } = useStore();
   const p = patrimonioPessoal(state);
-  const cw = liquidityByEntity(state, "cw");
-  const rove = liquidityByEntity(state, "rove");
-  const picasso = liquidityByEntity(state, "picasso");
-  const phEmp = liquidityByEntity(state, "ph");
-  const empresas = cw + rove + picasso + phEmp;
+  const byEntity = Object.fromEntries(
+    (["pessoal", ...COMPANIES] as const).map((id) => [id, liquidityByEntity(state, id)]),
+  ) as Record<keyof typeof ENTITY, number>;
+  const empresas = COMPANIES.reduce((s, id) => s + byEntity[id], 0);
   const u = unallocated(state);
   const alerts = buildAlerts(state);
   const fluxo = fluxoMes(state);
@@ -61,7 +62,7 @@ export function Eu() {
           De quem é este dinheiro?
         </h1>
         <p className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-ink/60">
-          Pessoal, PDS, Plural, Picasso's e PH são caixas à parte. O painel consolida. Não mistura.
+          Pessoal + quatro empresas. O painel consolida. Não mistura.
         </p>
 
         <div className="mt-12 grid gap-10 border-t border-ink/15 pt-10 lg:grid-cols-[1.35fr_0.9fr] lg:gap-16">
@@ -91,31 +92,25 @@ export function Eu() {
               <Mark tone="soft" /> Das empresas — não gastes
             </p>
             <div className="mt-5 space-y-0">
-              <div className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] py-3">
-                <span className="flex items-center gap-2 font-display text-lg tracking-tight">
-                  <Mark tone="copper" /> PDS
-                </span>
-                <span className="num text-lg text-ink/80">{cw.toLocaleString("pt-PT")} Kz</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] py-3">
-                <span className="flex items-center gap-2 font-display text-lg tracking-tight">
-                  <Mark tone="moss" /> Plural
-                </span>
-                <span className="num text-lg text-ink/80">{rove.toLocaleString("pt-PT")} Kz</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] py-3">
-                <span className="flex items-center gap-2 font-display text-lg tracking-tight">
-                  <Mark /> Picasso's
-                </span>
-                <span className="num text-lg text-ink/80">{picasso.toLocaleString("pt-PT")} Kz</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] py-3">
-                <span className="flex items-center gap-2 font-display text-lg tracking-tight">
-                  <Mark tone="pine" /> PH
-                </span>
-                <span className="num text-lg text-ink/80">{phEmp.toLocaleString("pt-PT")} Kz</span>
-              </div>
-              <Total label="Total empresas" n={empresas} mark="soft" />
+              {COMPANIES.map((id) => {
+                const e = ENTITY[id];
+                return (
+                  <div
+                    key={id}
+                    className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] py-3"
+                  >
+                    <span className="flex items-center gap-2 font-display text-lg tracking-tight">
+                      <Mark tone={e.tone} /> {e.short}
+                    </span>
+                    <span className="num text-lg font-semibold text-ink/80">
+                      {byEntity[id].toLocaleString("pt-PT")} Kz
+                    </span>
+                  </div>
+                );
+              })}
+              <TotalRow label="Total empresas" mark="soft">
+                <Money n={empresas} />
+              </TotalRow>
             </div>
           </div>
         </div>
@@ -123,76 +118,76 @@ export function Eu() {
 
       <Sep />
 
+      {/* Pessoal — faixa completa; empresas — 4 colunas iguais (não 5 esmagadas). */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="grid gap-12 lg:grid-cols-3 lg:items-stretch lg:gap-10"
+        className="space-y-14"
       >
-        <Col title="Pessoal" to="/contas" rail="rgb(var(--pine))" mark="pine">
-          <div className="flex flex-1 flex-col">
+        <Col meta={ENTITY.pessoal}>
+          <div className="grid gap-x-10 sm:grid-cols-2 lg:grid-cols-3">
             {banks.map((a) => (
               <Row key={a.id} label={a.name} n={liquidityOf(state, a.id)} />
             ))}
           </div>
-          <Total label="Total liquidez" n={p.dinheiro} mark="pine" />
-          <div className="flex flex-1 flex-col">
-            <Row label="A receber" n={p.receber} tone="in" />
-            <Row label="A pagar" n={p.dividas} tone="out" />
-          </div>
-          <Total
-            label="Total posição"
-            n={posicao}
-            mark="pine"
-            tone={posicao >= 0 ? "in" : "out"}
-            className="mt-auto"
-          />
-        </Col>
-        <Col title="PDS" to="/pds" rail="rgb(var(--copper))" mark="copper">
-          <div className="flex flex-1 flex-col">
-            <Row label="Caixa" n={cw} />
-            <Row label="Conta corrente Emanuel" n={owner} tone="in" />
-          </div>
-          <Total label="Total caixa + a receber" n={cw + owner} mark="copper" />
-          <div className="flex flex-1 flex-col">
-            <Row label="Receita julho (declarada)" n={state.declared.cwRevenueJuly} />
-            <Row label="Receita deste mês" n={receitaMes(state, "cw")} />
-          </div>
-          <div className="mt-auto">
-            <Row label="Lucro deste mês" n={lucroMes(state, "cw")} />
+          <div className="mt-2 grid gap-x-10 gap-y-1 border-t-2 border-ink pt-4 sm:grid-cols-2 lg:grid-cols-4">
+            <TotalCell label="Liquidez bruta" mark="pine" n={p.dinheiro} />
+            <TotalCell label="Própria" mark="pine" n={p.proprio} />
+            <TotalCell label="Custódia" mark="soft" n={p.custodia} />
+            <TotalCell label="A receber" mark="pine" n={p.receber} tone="in" />
+            <TotalCell label="Dívida própria" mark="rust" n={p.dividasOwn} tone="out" />
+            <TotalCell label="A pagar (total)" mark="rust" n={p.dividas} tone="out" />
+            <TotalCell
+              label="Posição"
+              mark="pine"
+              n={posicao}
+              tone={posicao >= 0 ? "in" : "out"}
+            />
           </div>
         </Col>
-        <Col title="Plural" to="/plural" rail="rgb(var(--moss))" mark="moss">
-          <div className="flex flex-1 flex-col">
-            <Row label="Caixa" n={rove} />
+
+        <div>
+          <div className="section-head mb-8 !border-ink/20">
+            <Mark tone="soft" />
+            <h2 className="section-title">Empresas</h2>
+            <span className="sep-line ml-2 hidden flex-1 sm:block" />
           </div>
-          <Total label="Total caixa" n={rove} mark="moss" />
-          <div className="flex flex-1 flex-col">
-            <Row label="Receita declarada" n={state.declared.roveRevenue} />
-            <Row label="Lucro declarado" n={state.declared.roveProfit} />
+          <div className="grid gap-10 sm:grid-cols-2 xl:grid-cols-4 xl:gap-12">
+            {COMPANIES.map((id) => {
+              const e = ENTITY[id];
+              const contas = state.accounts.filter((a) => a.entityId === id);
+              return (
+                <Col key={id} meta={e}>
+                  {contas.map((a) => (
+                    <Row
+                      key={a.id}
+                      label={shortAccountName(a.name, e.short)}
+                      n={liquidityOf(state, a.id)}
+                    />
+                  ))}
+                  <TotalRow label="Total" mark={e.tone}>
+                    <Money n={byEntity[id]} />
+                  </TotalRow>
+                  {id === "cw" && owner > 0 && (
+                    <Row label="C/C Emanuel" n={owner} tone="in" />
+                  )}
+                  {id === "cw" && (
+                    <Row label="Receita jul (decl.)" n={state.declared.cwRevenueJuly} />
+                  )}
+                  {id === "rove" && (
+                    <Row label="Receita (decl.)" n={state.declared.roveRevenue} />
+                  )}
+                  {id === "rove" && (
+                    <Row label="Lucro (decl.)" n={state.declared.roveProfit} />
+                  )}
+                  <Row label="Receita mês" n={receitaMes(state, id)} />
+                  <Row label="Lucro mês" n={lucroMes(state, id)} />
+                </Col>
+              );
+            })}
           </div>
-          <div className="mt-auto">
-            <Row label="Receita deste mês (registo)" n={receitaMes(state, "rove")} />
-          </div>
-        </Col>
-        <Col title="Picasso's" to="/picasso" rail="rgb(var(--ink))" mark="ink">
-          <div className="flex flex-1 flex-col">
-            <Row label="Caixa" n={picasso} />
-          </div>
-          <Total label="Total caixa" n={picasso} />
-          <div className="mt-auto">
-            <Row label="Receita deste mês" n={receitaMes(state, "picasso")} />
-          </div>
-        </Col>
-        <Col title="PH" to="/ph" rail="rgb(var(--pine))" mark="pine">
-          <div className="flex flex-1 flex-col">
-            <Row label="Caixa" n={phEmp} />
-          </div>
-          <Total label="Total caixa" n={phEmp} mark="pine" />
-          <div className="mt-auto">
-            <Row label="Receita deste mês" n={receitaMes(state, "ph")} />
-          </div>
-        </Col>
+        </div>
       </motion.div>
 
       <Sep />
@@ -209,7 +204,9 @@ export function Eu() {
           <Row label="Participações nas empresas" n={p.participacoes} />
           <Row label="A receber" n={p.receber} tone="in" />
           <Row label="Dívidas" n={p.dividas} tone="out" />
-          <Total label="Total" n={p.liquido} />
+          <TotalRow label="Total">
+            <Money n={p.liquido} />
+          </TotalRow>
         </div>
       </Section>
 
@@ -218,21 +215,20 @@ export function Eu() {
       <Section
         title={`Fluxo ${monthLabel(state.month)}`}
         mark="pine"
-        hint="Movimento do mês — o que entrou, saiu e ficou de lado."
+        hint="Movimentos reais do mês — não o salário declarado. Transferências ≠ despesas."
         className="mt-0"
       >
         <div>
-          <Row label="Entradas" n={fluxo.entradas} tone="in" />
+          <Row label="Entradas reais" n={fluxo.entradas} tone="in" />
           <Row label="Despesas" n={fluxo.despesas} tone="out" />
+          <Row label="Transferências" n={fluxo.transferencias} />
           <Row label="Investimentos" n={fluxo.investimentos} />
           <Row label="Dívidas pagas" n={fluxo.dividasPagas} />
-          <Row label="Reservado" n={fluxo.reservado} />
-          <Total
-            label="Total"
-            n={fluxoSaldo}
-            mark="pine"
-            tone={fluxoSaldo >= 0 ? "in" : "out"}
-          />
+          <Row label="Interempresa" n={fluxo.interempresa} />
+          <Row label="Reservado (aloc.)" n={fluxo.reservado} />
+          <TotalRow label="Total" mark="pine">
+            <Money n={fluxoSaldo} tone={fluxoSaldo >= 0 ? "in" : "out"} />
+          </TotalRow>
         </div>
       </Section>
 
@@ -250,7 +246,9 @@ export function Eu() {
             >
               <span className="flex min-w-0 flex-1 gap-3">
                 <Mark
-                  tone={a.tone === "bad" ? "ink" : a.tone === "warn" ? "copper" : "soft"}
+                  tone={
+                    (a.tone === "bad" ? "ink" : a.tone === "warn" ? "copper" : "soft") as MarkTone
+                  }
                 />
                 {a.href ? (
                   <Link to={a.href} className="hover:text-ink">
@@ -282,31 +280,27 @@ export function Eu() {
 }
 
 function Col({
-  title,
-  to,
+  meta,
   children,
-  rail,
-  mark,
 }: {
-  title: string;
-  to: string;
+  meta: { short: string; path: string; tone: EntityTone; rail: string };
   children: ReactNode;
-  rail: string;
-  mark: "pine" | "copper" | "moss" | "ink";
 }) {
   return (
-    <div className="entity-rail flex h-full flex-col" style={{ ["--rail" as string]: rail }}>
+    <div className="entity-rail min-w-0" style={{ ["--rail" as string]: meta.rail }}>
       <div className="section-head !border-ink/20 !pb-2">
-        <Mark tone={mark} />
-        <h2 className="font-display text-lg font-semibold tracking-tight">{title}</h2>
+        <Mark tone={meta.tone} />
+        <h2 className="min-w-0 truncate font-display text-lg font-semibold tracking-tight">
+          {meta.short}
+        </h2>
         <Link
-          to={to}
-          className="ml-auto text-[0.68rem] uppercase tracking-[0.16em] text-ink/35 hover:text-ink"
+          to={meta.path}
+          className="ml-auto shrink-0 text-[0.68rem] uppercase tracking-[0.16em] text-ink/35 hover:text-ink"
         >
           abrir
         </Link>
       </div>
-      <div className="mt-1 flex flex-1 flex-col">{children}</div>
+      <div className="mt-1">{children}</div>
     </div>
   );
 }
@@ -321,34 +315,45 @@ function Row({
   tone?: "in" | "out";
 }) {
   return (
-    <div className="ledger-row">
-      <span className="text-ink/60">{label}</span>
-      <Money n={n} tone={tone} />
+    <div className="ledger-row min-w-0">
+      <span className="min-w-0 truncate text-ink/60">{label}</span>
+      <span className="shrink-0 whitespace-nowrap">
+        <Money n={n} tone={tone} />
+      </span>
     </div>
   );
 }
 
-function Total({
-  label = "Total",
+function TotalCell({
+  label,
   n,
+  mark,
   tone,
-  mark = "ink",
-  className = "",
 }: {
-  label?: string;
+  label: string;
   n: number;
+  mark: MarkTone;
   tone?: "in" | "out";
-  mark?: "ink" | "pine" | "copper" | "moss" | "soft";
-  className?: string;
 }) {
   return (
-    <div
-      className={`ledger-row mt-1 !items-center border-t-2 border-ink !py-0 pt-4 pb-1 ${className}`}
-    >
-      <span className="flex min-w-0 items-center gap-2 font-display text-base tracking-tight">
-        <Mark tone={mark} /> {label}
+    <div className="flex min-w-0 items-baseline justify-between gap-3 py-1">
+      <span className="flex min-w-0 items-center gap-2 font-display text-sm font-semibold tracking-tight">
+        <Mark tone={mark} />
+        <span className="truncate">{label}</span>
       </span>
-      <Money n={n} tone={tone} />
+      <span className="shrink-0 whitespace-nowrap">
+        <Money n={n} tone={tone} />
+      </span>
     </div>
   );
+}
+
+/** Evita "Caixa PDS" sob o título PDS. */
+function shortAccountName(name: string, entityShort: string) {
+  const stripped = name
+    .replace(new RegExp(`\\s*[—-]\\s*${entityShort}$`, "i"), "")
+    .replace(new RegExp(`^Caixa\\s+${entityShort}$`, "i"), "Caixa")
+    .replace(new RegExp(`\\s+${entityShort}$`, "i"), "")
+    .trim();
+  return stripped || name;
 }

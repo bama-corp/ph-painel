@@ -2,6 +2,12 @@ export type EntityId = "pessoal" | "cw" | "rove" | "picasso" | "ph";
 
 export const COMPANIES: Exclude<EntityId, "pessoal">[] = ["cw", "rove", "picasso", "ph"];
 
+/** Classificação de ownership — nunca inferida só pelo entityId da conta. */
+export type OwnershipClass = "own" | "custody" | "company";
+
+/** Versão actual do schema persistido. */
+export const SCHEMA_VERSION = 4;
+
 export type MovementKind =
   | "receita"
   | "despesa"
@@ -13,7 +19,10 @@ export type MovementKind =
   | "distribuicao"
   | "reembolso"
   | "despesa_pessoal_pela_empresa"
-  | "alocacao";
+  | "alocacao"
+  | "ajuste"
+  | "pagamento_party"
+  | "cobranca_party";
 
 export type AccountKind = "banco" | "caixa" | "cofre" | "stand";
 
@@ -37,8 +46,12 @@ export type Party = {
   name: string;
   side: "receber" | "pagar";
   opening: number;
+  /** own = pessoal; custody = terceiros; company = relação empresa/proprietário */
+  ownership: OwnershipClass;
   unknown?: boolean;
   linkedEntityId?: EntityId;
+  /** Conta corrente do proprietário na empresa */
+  role?: "owner_current";
 };
 
 export type Asset = {
@@ -129,7 +142,15 @@ export type Declared = {
   salary: number;
 };
 
+export type NotebookEntry = {
+  id: string;
+  at: string;
+  title: string;
+  body: string;
+};
+
 export type AppState = {
+  schemaVersion: number;
   asOf: string;
   month: string;
   rules: BudgetRules;
@@ -141,6 +162,7 @@ export type AppState = {
   roveClients: RoveClient[];
   recurring: RecurringCost[];
   declared: Declared;
+  notes: NotebookEntry[];
 };
 
 export type AlertTone = "warn" | "bad" | "info";

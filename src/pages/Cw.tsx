@@ -9,11 +9,14 @@ import {
   ownerCurrent,
   receitaMes,
 } from "../domain/engine";
+import { ENTITY } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
 import { Money } from "../ui/Money";
 import { MoveForm } from "../ui/MoveForm";
-import { Mark, PageHeader, Section, TotalRow } from "../ui/Page";
+import { PageHeader, Section, Stat, TotalRow } from "../ui/Page";
+
+const meta = ENTITY.cw;
 
 export function Cw() {
   const { state } = useStore();
@@ -28,31 +31,30 @@ export function Cw() {
 
   return (
     <div className="page">
-      <PageHeader title="PDS" mark="copper">
-        PADStation — empresa independente. A caixa dela não é tua. Se tirares dinheiro, o sistema
-        pergunta o tipo.
+      <PageHeader title={meta.short} mark={meta.tone}>
+        {meta.lede}
       </PageHeader>
       <div className="mt-8">
         <MoveForm defaultEntity="cw" />
       </div>
 
       <dl className="mt-14 grid gap-10 sm:grid-cols-2">
-        <Item k="Caixa actual" n={caixa} mark="copper" />
-        <Item k={`Receita ${monthLabel(state.month)}`} n={rec} mark="pine" />
-        <Item k="Despesas do mês" n={desp} />
-        <Item k="Lucro do mês" n={lucro} mark="moss" />
-        <Item
-          k="Conta corrente do proprietário (a receber)"
+        <Stat label="Caixa actual" n={caixa} mark={meta.tone} />
+        <Stat label={`Receita ${monthLabel(state.month)}`} n={rec} mark={meta.tone} />
+        <Stat label="Despesas do mês" n={desp} mark="soft" />
+        <Stat label="Lucro do mês" n={lucro} mark={meta.tone} />
+        <Stat
+          label="Conta corrente do proprietário (a receber)"
           n={owner}
           note="Emanuel deve isto à PDS. Não está perdido."
-          mark="copper"
+          mark={meta.tone}
         />
-        <Item k="Faturação julho (por classificar)" n={july} />
+        <Stat label="Faturação julho (por classificar)" n={july} mark="soft" />
       </dl>
 
       <Section
         title="De onde vem a receita"
-        mark="copper"
+        mark={meta.tone}
         hint="Sem categorias, 86 mil Kz num mês não diz qual serviço dá dinheiro."
       >
         <ul>
@@ -66,12 +68,12 @@ export function Cw() {
             </li>
           ))}
         </ul>
-        <TotalRow label="Total" mark="copper">
+        <TotalRow label="Total" mark={meta.tone}>
           <Money n={Object.values(cats).reduce((s, n) => s + n, 0)} />
         </TotalRow>
       </Section>
 
-      <Section title="Custos" mark="copper">
+      <Section title="Custos" mark={meta.tone}>
         <ul>
           <li className="ledger-row">
             <span className="text-ink/65">Fixos (ex.: funcionário 35.000)</span>
@@ -90,7 +92,7 @@ export function Cw() {
             <Money n={costs.retirada} tone="out" />
           </li>
         </ul>
-        <TotalRow label="Total" mark="copper">
+        <TotalRow label="Total" mark={meta.tone}>
           <Money n={costs.fixo + costs.variavel + costs.investimento + costs.retirada} />
         </TotalRow>
         {state.recurring
@@ -102,31 +104,6 @@ export function Cw() {
             </p>
           ))}
       </Section>
-    </div>
-  );
-}
-
-function Item({
-  k,
-  n,
-  note,
-  mark = "soft",
-}: {
-  k: string;
-  n: number;
-  note?: string;
-  mark?: "ink" | "pine" | "copper" | "moss" | "soft";
-}) {
-  return (
-    <div>
-      <dt className="eyebrow flex items-center gap-2">
-        <Mark tone={mark} />
-        {k}
-      </dt>
-      <dd className="mt-2">
-        <Money n={n} />
-      </dd>
-      {note && <p className="mt-1.5 text-xs leading-relaxed text-ink/45">{note}</p>}
     </div>
   );
 }

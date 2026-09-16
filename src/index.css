@@ -10,6 +10,7 @@
   --moss: 58 114 89;
   --rust: 138 36 36;
   --copper: 31 90 102;
+  --clay: 122 78 48;
   --rule: 127 151 138;
   --wash: 228 238 232;
   --wash-deep: 201 219 208;
@@ -78,11 +79,11 @@ a {
 
 @layer components {
   .page {
-    @apply mx-auto w-full max-w-6xl;
+    @apply mx-auto w-full max-w-7xl;
   }
 
   .page-narrow {
-    @apply mx-auto w-full max-w-6xl;
+    @apply mx-auto w-full max-w-7xl;
   }
 
   .lede {
@@ -287,6 +288,14 @@ a {
 
   .mark-moss {
     background: rgb(var(--moss));
+  }
+
+  .mark-clay {
+    background: rgb(var(--clay));
+  }
+
+  .mark-rust {
+    background: rgb(var(--rust));
   }
 
   .mark-soft {

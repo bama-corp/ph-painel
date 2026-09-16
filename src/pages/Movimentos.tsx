@@ -1,5 +1,5 @@
 import { KIND_LABEL } from "../domain/engine";
-import { entityShort } from "../domain/labels";
+import { ENTITY_FILTER_OPTIONS, entityShort } from "../domain/labels";
 import { kz } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { EntityId } from "../domain/types";
@@ -7,15 +7,6 @@ import { MoveForm } from "../ui/MoveForm";
 import { Mark, PageHeader, Sep } from "../ui/Page";
 import { Select } from "../ui/Select";
 import { useState } from "react";
-
-const ENTITY_FILTER = [
-  { value: "todas" as const, label: "Todas" },
-  { value: "pessoal" as const, label: "Pessoal" },
-  { value: "cw" as const, label: "PDS" },
-  { value: "rove" as const, label: "Plural" },
-  { value: "picasso" as const, label: "Picasso's" },
-  { value: "ph" as const, label: "PH" },
-];
 
 export function Movimentos() {
   const { state } = useStore();
@@ -35,7 +26,7 @@ export function Movimentos() {
             inline
             value={entity}
             onChange={setEntity}
-            options={ENTITY_FILTER}
+            options={ENTITY_FILTER_OPTIONS}
           />
         </label>
       </div>

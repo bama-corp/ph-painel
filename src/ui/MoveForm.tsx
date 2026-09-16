@@ -1,22 +1,21 @@
 import { useState, type FormEvent } from "react";
 import { CW_CATS, KIND_LABEL } from "../domain/engine";
-import { entityShort } from "../domain/labels";
+import { entitySelectOptions, entityShort } from "../domain/labels";
 import { useStore } from "../domain/store";
 import type { CostNature, CwCategory, EntityId, MovementKind } from "../domain/types";
 import { Select } from "./Select";
 
-const ENTITY_OPTIONS = [
-  { value: "pessoal" as const, label: "Pessoal" },
-  { value: "cw" as const, label: "PDS (PADStation)" },
-  { value: "rove" as const, label: "Plural" },
-  { value: "picasso" as const, label: "Picasso's" },
-  { value: "ph" as const, label: "PH" },
-];
+const ENTITY_OPTIONS = entitySelectOptions("full");
 
-const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({
-  value: value as MovementKind,
-  label,
-}));
+const KIND_OPTIONS = Object.entries(KIND_LABEL)
+  .filter(
+    ([value]) =>
+      !["alocacao", "ajuste", "pagamento_party", "cobranca_party"].includes(value),
+  )
+  .map(([value, label]) => ({
+    value: value as MovementKind,
+    label,
+  }));
 
 const COST_NATURE_OPTIONS: { value: CostNature; label: string }[] = [
   { value: "fixo", label: "Fixo" },
@@ -68,10 +67,12 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
   const toOptions = [
     { value: "", label: "mundo / vazio" },
     ...accounts.map((a) => ({ value: a.id, label: a.name })),
-    ...otherAccounts.map((a) => ({
-      value: a.id,
-      label: `${entityShort(a.entityId)} · ${a.name}`,
-    })),
+    ...(kind === "transferencia"
+      ? []
+      : otherAccounts.map((a) => ({
+          value: a.id,
+          label: `${entityShort(a.entityId)} · ${a.name}`,
+        }))),
   ];
 
   const cwCategoryOptions = CW_CATS.map((c) => ({ value: c.id, label: c.label }));
@@ -87,45 +88,28 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
     const fromAcc = state.accounts.find((a) => a.id === fromId);
     const toAcc = state.accounts.find((a) => a.id === toId);
 
-    if (kind === "receita") {
-      if (!fromAcc && !toId) {
-        const dest = accounts[0]?.id;
-        if (!dest) return setErr("Conta de destino em falta.");
-        addMovement({
-          at,
-          kind,
-          amount: n,
-          from: { type: "world" },
-          to: { type: "liquidity", id: dest },
-          entityId,
-          category: entityId === "cw" ? category : undefined,
-          method,
-          responsible,
-          note,
-          envelopeId: entityId === "pessoal" ? envelopeId : undefined,
-        });
-      } else {
-        addMovement({
-          at,
-          kind,
-          amount: n,
-          from: { type: "world" },
-          to: { type: "liquidity", id: toId || fromId },
-          entityId,
-          category: entityId === "cw" ? category : undefined,
-          method,
-          responsible,
-          note,
-        });
-      }
-      done();
-      return;
-    }
+    let r: ReturnType<typeof addMovement> | null = null;
 
-    if (kind === "despesa") {
+    if (kind === "receita") {
+      const dest = toId || fromId || accounts[0]?.id;
+      if (!dest) return setErr("Conta de destino em falta.");
+      r = addMovement({
+        at,
+        kind,
+        amount: n,
+        from: { type: "world" },
+        to: { type: "liquidity", id: dest },
+        entityId,
+        category: entityId === "cw" ? category : undefined,
+        method,
+        responsible,
+        note,
+        envelopeId: entityId === "pessoal" ? envelopeId : undefined,
+      });
+    } else if (kind === "despesa") {
       if (!fromId) return setErr("Escolhe a conta de saída.");
       if (entityId === "pessoal" && !envelopeId) return setErr("Toda a despesa pessoal precisa de um bolso.");
-      addMovement({
+      r = addMovement({
         at,
         kind,
         amount: n,
@@ -139,16 +123,17 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         envelopeId: entityId === "pessoal" ? envelopeId : undefined,
         category: entityId === "cw" ? category : undefined,
       });
-      done();
-      return;
-    }
-
-    if (kind === "interempresa" || kind === "investimento_proprietario" || kind === "reembolso" || kind === "emprestimo_proprietario") {
+    } else if (
+      kind === "interempresa" ||
+      kind === "investimento_proprietario" ||
+      kind === "reembolso" ||
+      kind === "emprestimo_proprietario"
+    ) {
       if (!fromId || !toId) return setErr("Origem e destino obrigatórios.");
       if (fromAcc?.entityId === toAcc?.entityId && kind === "interempresa") {
         return setErr("Interempresarial tem de cruzar duas entidades diferentes.");
       }
-      addMovement({
+      r = addMovement({
         at,
         kind,
         amount: n,
@@ -162,13 +147,9 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         envelopeId: kind === "investimento_proprietario" ? "investimento" : undefined,
         costNature: OWNER.includes(kind) ? "retirada" : undefined,
       });
-      done();
-      return;
-    }
-
-    if (OWNER.includes(kind)) {
+    } else if (OWNER.includes(kind)) {
       if (!fromId) return setErr("Conta de origem em falta.");
-      addMovement({
+      r = addMovement({
         at,
         kind,
         amount: n,
@@ -180,13 +161,9 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         note,
         costNature: "retirada",
       });
-      done();
-      return;
-    }
-
-    if (kind === "transferencia") {
+    } else if (kind === "transferencia") {
       if (!fromId || !toId) return setErr("Duas contas da mesma entidade.");
-      addMovement({
+      r = addMovement({
         at,
         kind,
         amount: n,
@@ -196,11 +173,12 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         method,
         note,
       });
-      done();
-      return;
+    } else {
+      return setErr("Tipo não suportado neste formulário.");
     }
 
-    setErr("Tipo não suportado neste formulário.");
+    if (!r.ok) return setErr(r.reason);
+    done();
   }
 
   function done() {

@@ -1,19 +1,8 @@
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { useStore } from "../domain/store";
+import { NAV_LINKS } from "../domain/labels";
 import { monthLabel } from "../domain/money";
-
-const LINKS = [
-  { to: "/", label: "Eu" },
-  { to: "/orcamento", label: "Orçamento" },
-  { to: "/contas", label: "Contas" },
-  { to: "/pds", label: "PDS" },
-  { to: "/plural", label: "Plural" },
-  { to: "/picasso", label: "Picasso's" },
-  { to: "/ph", label: "PH" },
-  { to: "/movimentos", label: "Registo" },
-  { to: "/decisao", label: "Decisão" },
-];
+import { useStore } from "../domain/store";
 
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
@@ -22,8 +11,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="px-5 pt-6 sm:px-10 sm:pt-8">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-x-8 gap-y-4">
+      <header className="px-6 pt-6 sm:px-12 sm:pt-8 lg:px-16">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-x-8 gap-y-4">
           {home ? (
             <span className="eyebrow">Painel financeiro</span>
           ) : (
@@ -43,7 +32,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </NavLink>
           )}
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {LINKS.map((l) => (
+            {NAV_LINKS.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
@@ -56,11 +45,13 @@ export function Shell({ children }: { children: ReactNode }) {
           </nav>
         </div>
 
-        <div className="mx-auto mt-6 flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="mx-auto mt-6 flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3">
           <span className="mark" aria-hidden />
           <span className="sep-line min-w-[3rem] flex-1" />
           <p className="text-[0.78rem] text-ink/45">
-            {home ? "Três entidades. Um painel." : `Três entidades · ${monthLabel(state.month)}`}
+            {home
+              ? "Pessoal + quatro empresas. Um painel."
+              : `Cinco caixas · ${monthLabel(state.month)}`}
           </p>
           <span className="sep-line hidden w-8 sm:block sm:flex-none" />
           <div className="flex flex-wrap items-center gap-4 text-[0.72rem] text-ink/40">
@@ -73,15 +64,27 @@ export function Shell({ children }: { children: ReactNode }) {
                 className="border-b border-rule/60 bg-transparent py-0.5 outline-none focus:border-ink"
               />
             </label>
-            <button type="button" onClick={reset} className="tracking-wide hover:text-ink">
-              Repor
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Repor ao snapshot do seed (19/08/2026)? Os dados deste browser são apagados. Exporta JSON no Caderno se quiseres guardar.",
+                  )
+                ) {
+                  reset();
+                }
+              }}
+              className="tracking-wide hover:text-ink"
+            >
+              Repor seed
             </button>
           </div>
           <span className="mark mark-soft" aria-hidden />
         </div>
       </header>
 
-      <main className="px-5 pb-20 pt-8 sm:px-10 sm:pb-24 sm:pt-10">{children}</main>
+      <main className="px-6 pb-20 pt-8 sm:px-12 sm:pb-24 sm:pt-10 lg:px-16">{children}</main>
     </div>
   );
 }

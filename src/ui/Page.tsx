@@ -1,21 +1,21 @@
 import type { ReactNode } from "react";
+import type { EntityTone } from "../domain/labels";
+import { Money } from "./Money";
 
-export function Mark({
-  tone = "ink",
-}: {
-  tone?: "ink" | "pine" | "copper" | "moss" | "soft";
-}) {
-  const cls =
-    tone === "pine"
-      ? "mark mark-pine"
-      : tone === "copper"
-        ? "mark mark-copper"
-        : tone === "moss"
-          ? "mark mark-moss"
-          : tone === "soft"
-            ? "mark mark-soft"
-            : "mark";
-  return <span className={cls} aria-hidden />;
+export type MarkTone = EntityTone | "soft" | "rust";
+
+const MARK_CLASS: Record<MarkTone, string> = {
+  ink: "mark",
+  pine: "mark mark-pine",
+  copper: "mark mark-copper",
+  moss: "mark mark-moss",
+  clay: "mark mark-clay",
+  rust: "mark mark-rust",
+  soft: "mark mark-soft",
+};
+
+export function Mark({ tone = "ink" }: { tone?: MarkTone }) {
+  return <span className={MARK_CLASS[tone]} aria-hidden />;
 }
 
 /** Linha com marca ao centro — separador de bloco. */
@@ -39,7 +39,7 @@ export function PageHeader({
 }: {
   title: string;
   children?: ReactNode;
-  mark?: "ink" | "pine" | "copper" | "moss";
+  mark?: EntityTone;
 }) {
   return (
     <header className="page-head">
@@ -67,7 +67,7 @@ export function Section({
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
-  mark?: "ink" | "pine" | "copper" | "moss" | "soft";
+  mark?: MarkTone;
 }) {
   return (
     <section className={`mt-14 sm:mt-16 ${className}`}>
@@ -91,17 +91,44 @@ export function TotalRow({
 }: {
   label?: string;
   children: ReactNode;
-  mark?: "ink" | "pine" | "copper" | "moss" | "soft";
+  mark?: MarkTone;
   className?: string;
 }) {
   return (
     <div
-      className={`mt-1 flex items-baseline justify-between gap-4 border-t-2 border-ink pt-4 pb-1 ${className}`}
+      className={`mt-1 flex min-w-0 items-baseline justify-between gap-3 border-t-2 border-ink pt-4 pb-1 ${className}`}
     >
-      <span className="flex items-center gap-2 font-display text-base tracking-tight">
-        <Mark tone={mark} /> {label}
+      <span className="flex min-w-0 items-center gap-2 font-display text-base font-semibold tracking-tight">
+        <Mark tone={mark} />
+        <span className="truncate">{label}</span>
       </span>
-      {children}
+      <span className="shrink-0 whitespace-nowrap font-semibold">{children}</span>
+    </div>
+  );
+}
+
+/** KPI curto — caixa / receita / lucro nas páginas de entidade. */
+export function Stat({
+  label,
+  n,
+  mark = "soft",
+  note,
+}: {
+  label: string;
+  n: number;
+  mark?: MarkTone;
+  note?: string;
+}) {
+  return (
+    <div>
+      <dt className="eyebrow flex items-center gap-2">
+        <Mark tone={mark} />
+        {label}
+      </dt>
+      <dd className="mt-2">
+        <Money n={n} />
+      </dd>
+      {note ? <p className="mt-1.5 text-xs leading-relaxed text-ink/45">{note}</p> : null}
     </div>
   );
 }

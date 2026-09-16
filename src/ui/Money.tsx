@@ -20,7 +20,7 @@ export function Money({
 
   return (
     <span
-      className={`num ${large ? "text-[2.15rem] leading-none tracking-[-0.04em] sm:text-[3.35rem]" : ""} ${color}`}
+      className={`num font-semibold ${large ? "text-[2.15rem] leading-none tracking-[-0.04em] sm:text-[3.35rem]" : ""} ${color}`}
     >
       {kz(n)}
     </span>

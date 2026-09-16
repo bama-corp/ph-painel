@@ -1,12 +1,14 @@
 import type { AppState } from "./types";
+import { SCHEMA_VERSION } from "./types";
 
 /**
  * Snapshot de 19 ago 2026 (resumo_financeiro_atual).
  * Empresas: PDS, Plural, Picasso's, PH (36.500 — linha BAMA no resumo).
- * Lenu e Eduardo (GTA) são dinheiro de terceiros dentro da liquidez pessoal.
+ * Lenu e Eduardo (GTA) são custody (terceiros) dentro da liquidez pessoal bruta.
  */
 export function seedState(): AppState {
   return {
+    schemaVersion: SCHEMA_VERSION,
     asOf: "2026-08-19",
     month: "2026-08",
     rules: {
@@ -37,16 +39,32 @@ export function seedState(): AppState {
       { id: "projectos", name: "Projectos", purpose: "Dinheiro pessoal que decidiste meter num projecto." },
     ],
     parties: [
-      { id: "gsa", entityId: "pessoal", name: "GSA — Jun/jul (pago)", side: "receber", opening: 0 },
-      { id: "ferraz", entityId: "pessoal", name: "Chefe Ferraz", side: "receber", opening: 55000 },
-      { id: "bt", entityId: "pessoal", name: "BT", side: "receber", opening: 34000 },
-      { id: "nuno", entityId: "pessoal", name: "Nuno", side: "receber", opening: 8000 },
-      { id: "daniela", entityId: "pessoal", name: "Daniela", side: "receber", opening: 8000 },
-      { id: "tuni-pag", entityId: "pessoal", name: "Tuni", side: "pagar", opening: 60000 },
-      { id: "meneza", entityId: "pessoal", name: "Meneza (pago)", side: "pagar", opening: 0 },
-      { id: "lenu", entityId: "pessoal", name: "Lenu (terceiros)", side: "pagar", opening: 437600 },
-      { id: "eduardo-gta", entityId: "pessoal", name: "Eduardo — GTA 6 (terceiros)", side: "pagar", opening: 43316 },
-      { id: "emanuel-cw", entityId: "cw", name: "Emanuel — conta corrente", side: "receber", opening: 0, linkedEntityId: "pessoal" },
+      { id: "gsa", entityId: "pessoal", name: "GSA — jun/jul (pago)", side: "receber", opening: 0, ownership: "own" },
+      { id: "ferraz", entityId: "pessoal", name: "Chefe Ferraz", side: "receber", opening: 55000, ownership: "own" },
+      { id: "bt", entityId: "pessoal", name: "BT", side: "receber", opening: 34000, ownership: "own" },
+      { id: "nuno", entityId: "pessoal", name: "Nuno", side: "receber", opening: 8000, ownership: "own" },
+      { id: "daniela", entityId: "pessoal", name: "Daniela", side: "receber", opening: 8000, ownership: "own" },
+      { id: "tuni-pag", entityId: "pessoal", name: "Tuni", side: "pagar", opening: 60000, ownership: "own" },
+      { id: "meneza", entityId: "pessoal", name: "Meneza (pago)", side: "pagar", opening: 0, ownership: "own" },
+      { id: "lenu", entityId: "pessoal", name: "Lenu (terceiros)", side: "pagar", opening: 437600, ownership: "custody" },
+      {
+        id: "eduardo-gta",
+        entityId: "pessoal",
+        name: "Eduardo — GTA 6 (terceiros)",
+        side: "pagar",
+        opening: 43316,
+        ownership: "custody",
+      },
+      {
+        id: "emanuel-cw",
+        entityId: "cw",
+        name: "Emanuel — conta corrente",
+        side: "receber",
+        opening: 0,
+        ownership: "company",
+        linkedEntityId: "pessoal",
+        role: "owner_current",
+      },
     ],
     assets: [
       { id: "ps5", entityId: "pessoal", name: "PS5 + 2 comandos", value: 0 },
@@ -92,5 +110,6 @@ export function seedState(): AppState {
       roveProfit: 29000,
       salary: 220000,
     },
+    notes: [],
   };
 }

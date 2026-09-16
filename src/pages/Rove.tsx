@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { liveRoveStatus, lucroMes, receitaMes, roveCounts, roveMrr, unitEconomics } from "../domain/engine";
+import { ENTITY } from "../domain/labels";
 import { useStore } from "../domain/store";
 import type { RoveProduct, RoveStatus } from "../domain/types";
 import { Money } from "../ui/Money";
 import { MoveForm } from "../ui/MoveForm";
-import { Mark, PageHeader, Section } from "../ui/Page";
+import { Mark, PageHeader, Section, Stat, TotalRow } from "../ui/Page";
 import { Select } from "../ui/Select";
+
+const meta = ENTITY.rove;
 
 const PLAN_OPTIONS = [
   { value: "netflix" as const, label: "Netflix" },
@@ -30,19 +33,19 @@ export function Rove() {
 
   return (
     <div className="page">
-      <PageHeader title="Plural" mark="moss">
-        Recorrência. Cliente não é pagamento. A faturação declarada só conta quando o cliente paga.
+      <PageHeader title={meta.short} mark={meta.tone}>
+        {meta.lede}
       </PageHeader>
       <div className="mt-8">
         <MoveForm defaultEntity="rove" />
       </div>
 
-      <dl className="mt-14 grid gap-8 sm:grid-cols-3">
-        <Box k="MRR (activos / atraso / suspenso)" n={mrr} />
-        <Box k="Receita declarada" n={state.declared.roveRevenue} />
-        <Box k="Lucro declarado" n={state.declared.roveProfit} />
-        <Box k="Receita registada no mês" n={receitaMes(state, "rove")} />
-        <Box k="Lucro registado no mês" n={lucroMes(state, "rove")} />
+      <dl className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        <Stat label="MRR (activos / atraso / suspenso)" n={mrr} mark={meta.tone} />
+        <Stat label="Receita declarada" n={state.declared.roveRevenue} mark={meta.tone} />
+        <Stat label="Lucro declarado" n={state.declared.roveProfit} mark={meta.tone} />
+        <Stat label="Receita registada no mês" n={receitaMes(state, "rove")} mark="soft" />
+        <Stat label="Lucro registado no mês" n={lucroMes(state, "rove")} mark="soft" />
       </dl>
 
       <div className="mt-10 flex flex-wrap gap-x-7 gap-y-2 border-y border-ink/10 py-4 text-sm">
@@ -58,7 +61,7 @@ export function Rove() {
         <Unit title="IPTV" u={iptv} />
       </div>
 
-      <Section title="Clientes">
+      <Section title="Clientes" mark={meta.tone}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
@@ -102,26 +105,13 @@ export function Rove() {
   );
 }
 
-function Box({ k, n }: { k: string; n: number }) {
-  return (
-    <div>
-      <dt className="eyebrow flex items-center gap-2">
-        <Mark tone="moss" />
-        {k}
-      </dt>
-      <dd className="mt-2">
-        <Money n={n} />
-      </dd>
-    </div>
-  );
-}
-
 function Unit({ title, u }: { title: string; u: ReturnType<typeof unitEconomics> }) {
   return (
     <div>
       <div className="section-head">
-        <Mark tone="moss" />
+        <Mark tone={meta.tone} />
         <h2 className="section-title">{title}</h2>
+        <span className="sep-line ml-2 hidden flex-1 sm:block" />
       </div>
       <p className="mt-3 text-sm text-ink/45">{u.n} clientes a contar para MRR</p>
       <ul className="mt-4">
@@ -133,11 +123,10 @@ function Unit({ title, u }: { title: string; u: ReturnType<typeof unitEconomics>
           <span className="text-ink/65">Custo proporcional</span>
           <Money n={u.perClientCost} />
         </li>
-        <li className="flex items-baseline justify-between gap-4 border-t border-ink/20 pt-3 text-sm">
-          <span>Margem por cliente</span>
-          <Money n={u.margem} tone={u.margem >= 0 ? "in" : "out"} />
-        </li>
       </ul>
+      <TotalRow label="Margem por cliente" mark={meta.tone}>
+        <Money n={u.margem} tone={u.margem >= 0 ? "in" : "out"} />
+      </TotalRow>
       {u.perClientCost === 0 && (
         <p className="mt-3 text-xs text-copper">
           Custos Plural ainda não registados em recorrentes — margem incompleta.

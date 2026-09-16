@@ -8,6 +8,7 @@ import { Rove } from "./pages/Rove";
 import { Movimentos } from "./pages/Movimentos";
 import { Empresa } from "./pages/Empresa";
 import { Decisao } from "./pages/Decisao";
+import { Caderno } from "./pages/Caderno";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/rove" element={<Navigate to="/plural" replace />} />
         <Route path="/movimentos" element={<Movimentos />} />
         <Route path="/decisao" element={<Decisao />} />
+        <Route path="/caderno" element={<Caderno />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

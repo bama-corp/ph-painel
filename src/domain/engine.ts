@@ -10,6 +10,7 @@ import type {
   Endpoint,
   EntityId,
   Movement,
+  OwnershipClass,
   RoveProduct,
   RoveStatus,
 } from "./types";
@@ -36,6 +37,9 @@ export const KIND_LABEL: Record<Movement["kind"], string> = {
   reembolso: "Reembolso / pagamento da conta corrente",
   despesa_pessoal_pela_empresa: "Despesa pessoal paga pela empresa",
   alocacao: "Alocação (bolso)",
+  ajuste: "Ajuste auditado",
+  pagamento_party: "Pagamento a party (dívida)",
+  cobranca_party: "Cobrança de party (a receber)",
 };
 
 const OWNER_KINDS: Movement["kind"][] = [
@@ -95,16 +99,83 @@ export function envelopesTotal(state: AppState) {
   return roundKz(state.envelopes.reduce((s, e) => s + envelopeOf(state, e.id), 0));
 }
 
+/** Gasto do mês neste bolso (despesas + investimento do proprietário). */
+export function envelopeSpentMes(state: AppState, envelopeId: string, month = state.month) {
+  return roundKz(
+    state.movements
+      .filter(
+        (m) =>
+          m.envelopeId === envelopeId &&
+          inMonth(m.at, month) &&
+          (m.kind === "despesa" || m.kind === "investimento_proprietario"),
+      )
+      .reduce((s, m) => s + m.amount, 0),
+  );
+}
+
+// —— Ownership & métricas fundamentais (LIQUIDITY ≠ ALLOCATABLE ≠ SPENDABLE ≠ NET WORTH) ——
+
+/** Liquidez física em contas pessoais (inclui custódia misturada nos bancos). */
+export function personalGrossLiquidity(state: AppState) {
+  return liquidityByEntity(state, "pessoal");
+}
+
+/** Valor de terceiros sob custódia (parties ownership=custody). */
+export function custodyLiquidity(state: AppState) {
+  return roundKz(
+    state.parties
+      .filter((p) => p.ownership === "custody")
+      .reduce((s, p) => s + partyOf(state, p.id), 0),
+  );
+}
+
+/** Liquidez pessoal própria = bruto − custódia. */
+export function personalOwnLiquidity(state: AppState) {
+  return roundKz(Math.max(0, personalGrossLiquidity(state) - custodyLiquidity(state)));
+}
+
+/** Liquidez de todas as empresas. */
+export function companyLiquidity(state: AppState) {
+  return roundKz(COMPANIES.reduce((s, id) => s + liquidityByEntity(state, id), 0));
+}
+
+/** Capital pessoal já nos bolsos. */
+export function allocatedPersonal(state: AppState) {
+  return envelopesTotal(state);
+}
+
+/**
+ * Capital pessoal próprio ainda sem função.
+ * Nunca inclui custody nem company.
+ */
+export function allocatablePersonal(state: AppState) {
+  return roundKz(Math.max(0, personalOwnLiquidity(state) - allocatedPersonal(state)));
+}
+
+/**
+ * Gastável = operacional + lazer.
+ * Só faz sentido sobre capital já alocado a esses bolsos (próprio por invariante).
+ */
+export function spendablePersonal(state: AppState) {
+  return roundKz(envelopeOf(state, "operacional") + envelopeOf(state, "lazer"));
+}
+
+/** @deprecated Use allocatablePersonal — mantido como alias seguro. */
 export function unallocated(state: AppState) {
-  return roundKz(liquidityByEntity(state, "pessoal") - envelopesTotal(state));
+  return allocatablePersonal(state);
 }
 
 export function partyOf(state: AppState, partyId: string) {
   const p = state.parties.find((x) => x.id === partyId);
   if (!p) return 0;
   let n = p.opening;
-  const owner = partyId === "cw-divida-p" || partyId === "emanuel-cw";
+  const owner = p.role === "owner_current" || partyId === "cw-divida-p" || partyId === "emanuel-cw";
   for (const m of state.movements) {
+    if (m.kind === "pagamento_party" || m.kind === "cobranca_party") {
+      // Operação atómica: reduz o saldo da party (dívida ou a receber).
+      if (hit(m.to, "party", partyId) || hit(m.from, "party", partyId)) n -= m.amount;
+      continue;
+    }
     if (hit(m.to, "party", partyId)) n += m.amount;
     if (hit(m.from, "party", partyId)) n -= m.amount;
     if (owner) {
@@ -115,9 +186,21 @@ export function partyOf(state: AppState, partyId: string) {
   return roundKz(Math.max(0, n));
 }
 
-export function partiesSum(state: AppState, entity: EntityId, side: "receber" | "pagar") {
+export function partiesSum(
+  state: AppState,
+  entity: EntityId,
+  side: "receber" | "pagar",
+  ownership?: OwnershipClass,
+) {
   return roundKz(
-    state.parties.filter((p) => p.entityId === entity && p.side === side).reduce((s, p) => s + partyOf(state, p.id), 0),
+    state.parties
+      .filter(
+        (p) =>
+          p.entityId === entity &&
+          p.side === side &&
+          (ownership === undefined || p.ownership === ownership),
+      )
+      .reduce((s, p) => s + partyOf(state, p.id), 0),
   );
 }
 
@@ -180,7 +263,8 @@ export function cwCosts(state: AppState, month = state.month) {
 }
 
 export function ownerCurrent(state: AppState) {
-  return partyOf(state, "emanuel-cw");
+  const p = state.parties.find((x) => x.role === "owner_current");
+  return p ? partyOf(state, p.id) : partyOf(state, "emanuel-cw");
 }
 
 export function equity(state: AppState, entity: EntityId) {
@@ -192,17 +276,35 @@ export function equity(state: AppState, entity: EntityId) {
 }
 
 export function patrimonioPessoal(state: AppState) {
-  const dinheiro = liquidityByEntity(state, "pessoal");
+  const dinheiro = personalGrossLiquidity(state);
+  const proprio = personalOwnLiquidity(state);
+  const custodia = custodyLiquidity(state);
   const bens = assetsOf(state, "pessoal");
   const participacoes = roundKz(COMPANIES.reduce((s, id) => s + equity(state, id), 0));
+  const dividasOwn = partiesSum(state, "pessoal", "pagar", "own");
   const dividas = partiesSum(state, "pessoal", "pagar");
-  const receber = partiesSum(state, "pessoal", "receber");
+  const receber = partiesSum(state, "pessoal", "receber", "own");
   const liquido = roundKz(dinheiro + bens + participacoes + receber - dividas);
-  return { dinheiro, bens, participacoes, dividas, receber, liquido };
+  return {
+    dinheiro,
+    proprio,
+    custodia,
+    bens,
+    participacoes,
+    dividas,
+    dividasOwn,
+    receber,
+    liquido,
+  };
+}
+
+/** Net worth — não é gastável. */
+export function netWorth(state: AppState) {
+  return patrimonioPessoal(state).liquido;
 }
 
 export function spendable(state: AppState) {
-  return roundKz(envelopeOf(state, "operacional") + envelopeOf(state, "lazer"));
+  return spendablePersonal(state);
 }
 
 export function liveRoveStatus(c: AppState["roveClients"][number], asOf: string): RoveStatus {
@@ -272,23 +374,60 @@ export function unitEconomics(state: AppState, product: RoveProduct) {
 export function fluxoMes(state: AppState, month = state.month) {
   let entradas = 0;
   let despesas = 0;
+  let transferencias = 0;
   let investimentos = 0;
   let dividasPagas = 0;
+  let interempresa = 0;
+  let cobrancas = 0;
   let reservado = 0;
+  let alocadoInvestimento = 0;
+
   for (const m of state.movements) {
     if (!inMonth(m.at, month)) continue;
+
     if (m.kind === "receita" && m.entityId === "pessoal") entradas += m.amount;
+    if (m.kind === "cobranca_party" && m.entityId === "pessoal") cobrancas += m.amount;
     if (m.kind === "despesa" && m.entityId === "pessoal") despesas += m.amount;
-    if (m.kind === "alocacao" && hit(m.to, "envelope", "investimento")) investimentos += m.amount;
+    if (m.kind === "transferencia" && m.entityId === "pessoal") transferencias += m.amount;
+    if (m.kind === "investimento_proprietario") investimentos += m.amount;
+    if (m.kind === "pagamento_party" && m.entityId === "pessoal") dividasPagas += m.amount;
+    if (m.kind === "reembolso") dividasPagas += m.amount;
+    if (m.kind === "interempresa") interempresa += m.amount;
+    if (m.kind === "alocacao" && hit(m.to, "envelope", "investimento")) alocadoInvestimento += m.amount;
     if (m.kind === "alocacao" && hit(m.to, "envelope", "reserva")) reservado += m.amount;
-    if (m.kind === "reembolso" || (m.kind === "despesa" && m.from.type === "party")) dividasPagas += m.amount;
   }
+
   return {
+    /** Entradas reais do mês (movimentos), não o salário declarado. */
     entradas: roundKz(entradas),
     despesas: roundKz(despesas),
+    transferencias: roundKz(transferencias),
     investimentos: roundKz(investimentos),
     dividasPagas: roundKz(dividasPagas),
+    interempresa: roundKz(interempresa),
+    cobrancas: roundKz(cobrancas),
     reservado: roundKz(reservado),
+    alocadoInvestimento: roundKz(alocadoInvestimento),
+    /** Salário GSA declarado — referência de planeamento, não substituto das entradas. */
+    salarioDeclarado: state.declared.salary,
+  };
+}
+
+/** Métricas saneadas para o CFO — nunca misturar bruto / custody / net worth com gastável. */
+export function cfoMetrics(state: AppState) {
+  return {
+    gastavel: spendablePersonal(state),
+    reservado: envelopeOf(state, "reserva"),
+    investivel: envelopeOf(state, "investimento"),
+    alocavel: allocatablePersonal(state),
+    custodia: custodyLiquidity(state),
+    dividaPropria: partiesSum(state, "pessoal", "pagar", "own"),
+    dividaTerceiros: partiesSum(state, "pessoal", "pagar", "custody"),
+    empresa: companyLiquidity(state),
+    contaCorrenteProprietario: ownerCurrent(state),
+    liquidezPropria: personalOwnLiquidity(state),
+    liquidezBrutaPessoal: personalGrossLiquidity(state),
+    patrimonioLiquido: netWorth(state),
   };
 }
 
@@ -299,7 +438,7 @@ export function buildAlerts(state: AppState): Alert[] {
     out.push({
       id: "unalloc",
       tone: "bad",
-      text: `${u.toLocaleString("pt-PT")} Kz pessoais sem função. Dinheiro disponível não é dinheiro para gastar.`,
+      text: `${u.toLocaleString("pt-PT")} Kz alocáveis (capital próprio). Custódia e empresa excluídos — disponível ≠ gastável.`,
       href: "/orcamento",
     });
   }
@@ -389,83 +528,361 @@ export function splitSalary(amount: number, rules: BudgetRules) {
   return { obrigacoes: a, reserva: r, investimento: i, despesas: d, lazer: l };
 }
 
+/** Partes de alocação a partir das BudgetRules guardadas (não draft de UI). */
+export function partsFromRules(amount: number, rules: BudgetRules) {
+  const s = splitSalary(amount, rules);
+  return [
+    { envelopeId: "operacional", amount: roundKz(s.obrigacoes + s.despesas) },
+    { envelopeId: "reserva", amount: s.reserva },
+    { envelopeId: "investimento", amount: s.investimento },
+    { envelopeId: "lazer", amount: s.lazer },
+  ].filter((p) => p.amount > 0);
+}
+
+export type AllocateResult =
+  | { ok: true; state: AppState }
+  | { ok: false; reason: string; state: AppState };
+
+/**
+ * Aloca apenas a partir de allocatablePersonal.
+ * Nunca usa custody nem company.
+ */
+export function applyAllocate(
+  state: AppState,
+  parts: { envelopeId: string; amount: number }[],
+  opts?: { at?: string; idPrefix?: string },
+): AllocateResult {
+  const cleaned = parts
+    .map((p) => ({ envelopeId: p.envelopeId, amount: roundKz(p.amount) }))
+    .filter((p) => p.amount > 0);
+
+  if (cleaned.length === 0) {
+    return { ok: false, reason: "Nada para alocar.", state };
+  }
+
+  for (const p of cleaned) {
+    if (!state.envelopes.some((e) => e.id === p.envelopeId)) {
+      return { ok: false, reason: `Bolso desconhecido: ${p.envelopeId}`, state };
+    }
+  }
+
+  const total = roundKz(cleaned.reduce((s, p) => s + p.amount, 0));
+  const avail = allocatablePersonal(state);
+  if (total > avail + 0.001) {
+    return {
+      ok: false,
+      reason: `Só há ${avail.toLocaleString("pt-PT")} Kz alocáveis (capital pessoal próprio). Custódia e empresa excluídos.`,
+      state,
+    };
+  }
+
+  const at = opts?.at ?? state.asOf;
+  const prefix = opts?.idPrefix ?? "a";
+  const extra: Movement[] = cleaned.map((p, i) => ({
+    id: `${prefix}_${i}_${Date.now().toString(36)}`,
+    at,
+    kind: "alocacao" as const,
+    amount: p.amount,
+    from: { type: "unallocated" as const },
+    to: { type: "envelope" as const, id: p.envelopeId },
+    entityId: "pessoal" as const,
+    envelopeId: p.envelopeId,
+    note: "Alocação de bolso",
+  }));
+
+  return { ok: true, state: { ...state, movements: [...extra, ...state.movements] } };
+}
+
+/**
+ * Distribui uma entrada de N Kz pelas regras já guardadas em state.rules.
+ * Não distribui o stock inteiro — só o valor da entrada (≤ allocatablePersonal).
+ */
+export function applyDistributeEntry(
+  state: AppState,
+  entryAmount: number,
+  opts?: { at?: string },
+): AllocateResult {
+  if (!rulesOk(state.rules)) {
+    return { ok: false, reason: "Regras guardadas inválidas (soma ≠ 100%).", state };
+  }
+  const amount = roundKz(entryAmount);
+  if (!(amount > 0)) {
+    return { ok: false, reason: "Indica o valor da entrada a distribuir.", state };
+  }
+  const avail = allocatablePersonal(state);
+  if (amount > avail + 0.001) {
+    return {
+      ok: false,
+      reason: `Entrada ${amount.toLocaleString("pt-PT")} Kz > alocável ${avail.toLocaleString("pt-PT")} Kz.`,
+      state,
+    };
+  }
+  return applyAllocate(state, partsFromRules(amount, state.rules), opts);
+}
+
+export type MovementResult =
+  | { ok: true; state: AppState; movement: Movement }
+  | { ok: false; reason: string; state: AppState };
+
+function accountEntity(state: AppState, ep: Endpoint): EntityId | null {
+  if (ep.type !== "liquidity") return null;
+  return state.accounts.find((a) => a.id === ep.id)?.entityId ?? null;
+}
+
+/**
+ * Invariantes de movimento no domínio (não só UI).
+ * transferencia => mesma entidade; cross-entity exige kind apropriado.
+ */
+export function validateMovement(state: AppState, m: Omit<Movement, "id"> | Movement): string | null {
+  if (!(m.amount > 0)) return "Valor inválido.";
+
+  if (m.kind === "transferencia") {
+    if (m.from.type !== "liquidity" || m.to.type !== "liquidity") {
+      return "Transferência exige duas contas de liquidez.";
+    }
+    const fromE = accountEntity(state, m.from);
+    const toE = accountEntity(state, m.to);
+    if (!fromE || !toE) return "Contas de transferência inválidas.";
+    if (fromE !== toE) {
+      return "Transferência cross-entity rejeitada. Usa interempresa, investimento_proprietario, empréstimo, reembolso, pró-labore ou distribuição.";
+    }
+    if (m.entityId !== fromE) {
+      return "A entidade do movimento deve coincidir com a das contas.";
+    }
+    if (m.from.id === m.to.id) return "Origem e destino iguais.";
+    return null;
+  }
+
+  if (m.kind === "interempresa") {
+    if (m.from.type !== "liquidity" || m.to.type !== "liquidity") {
+      return "Interempresa exige duas contas de liquidez.";
+    }
+    const fromE = accountEntity(state, m.from);
+    const toE = accountEntity(state, m.to);
+    if (!fromE || !toE) return "Contas inválidas.";
+    if (fromE === toE) return "Interempresa tem de cruzar duas entidades diferentes.";
+    return null;
+  }
+
+  if (m.kind === "despesa" && m.entityId === "pessoal") {
+    if (!m.envelopeId) return "Despesa pessoal exige bolso.";
+    const bal = envelopeOf(state, m.envelopeId);
+    if (bal + 0.001 < m.amount) {
+      return `Bolso «${m.envelopeId}» insuficiente (${bal.toLocaleString("pt-PT")} Kz). Financia o bolso antes — saldo negativo silencioso bloqueado.`;
+    }
+  }
+
+  if (m.kind === "investimento_proprietario") {
+    if (m.envelopeId && m.envelopeId !== "investimento") {
+      return "Investimento do proprietário deve sair do bolso investimento.";
+    }
+    const env = m.envelopeId ?? "investimento";
+    const bal = envelopeOf(state, env);
+    if (bal + 0.001 < m.amount) {
+      return `Bolso investimento insuficiente (${bal.toLocaleString("pt-PT")} Kz).`;
+    }
+  }
+
+  if (m.kind === "pagamento_party") {
+    if (m.from.type !== "liquidity" || m.to.type !== "party") {
+      return "Pagamento de party: saída de liquidez → party.";
+    }
+    const fromId = m.from.id;
+    const partyId = m.to.id;
+    const party = state.parties.find((p) => p.id === partyId);
+    if (!party) return "Party inexistente.";
+    if (party.side !== "pagar") return "Pagamento só para parties a pagar. Usa cobrança para a receber.";
+    const due = partyOf(state, party.id);
+    if (m.amount > due + 0.001) {
+      return `Valor acima do saldo da party (${due.toLocaleString("pt-PT")} Kz).`;
+    }
+    const cash = liquidityOf(state, fromId);
+    if (m.amount > cash + 0.001) {
+      return `Liquidez insuficiente na conta (${cash.toLocaleString("pt-PT")} Kz).`;
+    }
+    return null;
+  }
+
+  if (m.kind === "cobranca_party") {
+    if (m.from.type !== "party" || m.to.type !== "liquidity") {
+      return "Cobrança: party → liquidez.";
+    }
+    const partyId = m.from.id;
+    const party = state.parties.find((p) => p.id === partyId);
+    if (!party) return "Party inexistente.";
+    if (party.side !== "receber") return "Cobrança só para parties a receber.";
+    const due = partyOf(state, party.id);
+    if (m.amount > due + 0.001) {
+      return `Valor acima do a receber (${due.toLocaleString("pt-PT")} Kz).`;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+export function applyAddMovement(
+  state: AppState,
+  draft: Omit<Movement, "id">,
+  id?: string,
+): MovementResult {
+  const reason = validateMovement(state, draft);
+  if (reason) return { ok: false, reason, state };
+  const movement: Movement = {
+    ...draft,
+    id: id ?? `m_${Date.now().toString(36)}`,
+    envelopeId:
+      draft.kind === "investimento_proprietario"
+        ? draft.envelopeId ?? "investimento"
+        : draft.envelopeId,
+  };
+  // Re-validate after defaulting envelope
+  const reason2 = validateMovement(state, movement);
+  if (reason2) return { ok: false, reason: reason2, state };
+  return { ok: true, state: { ...state, movements: [movement, ...state.movements] }, movement };
+}
+
+/**
+ * Pagamento atómico de dívida: reduz liquidez e reduz obrigação da party.
+ * Não depende de IDs hard-coded — usa party.side / ownership do domínio.
+ */
+export function applyPartyPayment(
+  state: AppState,
+  opts: {
+    partyId: string;
+    accountId: string;
+    amount: number;
+    at?: string;
+    note?: string;
+    id?: string;
+  },
+): MovementResult {
+  const party = state.parties.find((p) => p.id === opts.partyId);
+  if (!party) return { ok: false, reason: "Party inexistente.", state };
+  return applyAddMovement(
+    state,
+    {
+      at: opts.at ?? state.asOf,
+      kind: "pagamento_party",
+      amount: roundKz(opts.amount),
+      from: { type: "liquidity", id: opts.accountId },
+      to: { type: "party", id: opts.partyId },
+      entityId: party.entityId,
+      note: opts.note ?? `Pagamento · ${party.name}`,
+    },
+    opts.id,
+  );
+}
+
+/** Cobrança atómica: reduz a receber e aumenta liquidez. */
+export function applyPartyCollection(
+  state: AppState,
+  opts: {
+    partyId: string;
+    accountId: string;
+    amount: number;
+    at?: string;
+    note?: string;
+    id?: string;
+  },
+): MovementResult {
+  const party = state.parties.find((p) => p.id === opts.partyId);
+  if (!party) return { ok: false, reason: "Party inexistente.", state };
+  return applyAddMovement(
+    state,
+    {
+      at: opts.at ?? state.asOf,
+      kind: "cobranca_party",
+      amount: roundKz(opts.amount),
+      from: { type: "party", id: opts.partyId },
+      to: { type: "liquidity", id: opts.accountId },
+      entityId: party.entityId,
+      note: opts.note ?? `Cobrança · ${party.name}`,
+    },
+    opts.id,
+  );
+}
+
 export function buildDecisions(state: AppState): Decision[] {
-  const can = spendable(state);
-  const u = unallocated(state);
-  const inv = envelopeOf(state, "investimento");
-  const res = envelopeOf(state, "reserva");
-  const own = ownerCurrent(state);
-  const pay = partiesSum(state, "pessoal", "pagar");
+  const m = cfoMetrics(state);
   const split = splitSalary(state.declared.salary, state.rules);
   const fluxo = fluxoMes(state);
-  const over = fluxo.despesas > split.despesas + split.lazer && fluxo.despesas > 0;
+  const tectoGastoPlaneado = split.despesas + split.lazer;
+  const over = fluxo.despesas > tectoGastoPlaneado && fluxo.despesas > 0;
 
   const gastar: Decision = {
     question: "Quanto posso gastar?",
-    answer: u > 1 ? "Ainda não — há dinheiro sem função." : kzAnswer(can),
+    answer: m.alocavel > 1 ? "Ainda não — há capital próprio sem função." : kzAnswer(m.gastavel),
     detail:
-      u > 1
-        ? `Há ${u.toLocaleString("pt-PT")} Kz por alocar. O total nas contas (${liquidityByEntity(state, "pessoal").toLocaleString("pt-PT")} Kz) não é teto de gasto. Aloca primeiro.`
-        : `Só operacional + lazer. Reserva e investimento estão fechados.`,
-    tone: u > 1 ? "bad" : can > 0 ? "ok" : "warn",
+      m.alocavel > 1
+        ? `Há ${m.alocavel.toLocaleString("pt-PT")} Kz alocáveis (próprios). Liquidez bruta (${m.liquidezBrutaPessoal.toLocaleString("pt-PT")} Kz) e património líquido não são teto de gasto. Custódia (${m.custodia.toLocaleString("pt-PT")} Kz) está excluída. Aloca primeiro.`
+        : `Gastável = operacional + lazer = ${m.gastavel.toLocaleString("pt-PT")} Kz. Reserva ${m.reservado.toLocaleString("pt-PT")} · investível ${m.investivel.toLocaleString("pt-PT")} · custódia ${m.custodia.toLocaleString("pt-PT")} — não gastáveis.`,
+    tone: m.alocavel > 1 ? "bad" : m.gastavel > 0 ? "ok" : "warn",
   };
 
   const reservar: Decision = {
     question: "Quanto devo reservar?",
     answer: kzAnswer(split.reserva),
-    detail: `Regra actual: ${state.rules.reserva}% de cada entrada. Na próxima de ${state.declared.salary.toLocaleString("pt-PT")} Kz (GSA), vão ${split.reserva.toLocaleString("pt-PT")} Kz para reserva. Hoje o bolso reserva tem ${res.toLocaleString("pt-PT")} Kz.`,
-    tone: res < split.reserva ? "warn" : "ok",
+    detail: `Regra: ${state.rules.reserva}% de cada entrada própria. Simulação salário GSA ${state.declared.salary.toLocaleString("pt-PT")} Kz → ${split.reserva.toLocaleString("pt-PT")} Kz (não é entrada real do mês). Bolso reserva hoje: ${m.reservado.toLocaleString("pt-PT")} Kz.`,
+    tone: m.reservado < split.reserva ? "warn" : "ok",
   };
 
   const investir: Decision = {
     question: "Quanto devo investir?",
-    answer: kzAnswer(split.investimento),
-    detail: `Regra: ${state.rules.investimento}% da entrada. Bolso investimento: ${inv.toLocaleString("pt-PT")} Kz. Só daqui sai dinheiro para as empresas — nunca da caixa delas, nem do operacional.`,
+    answer: kzAnswer(m.investivel > 0 ? m.investivel : split.investimento),
+    detail: `Investível agora (bolso): ${m.investivel.toLocaleString("pt-PT")} Kz. Regra ${state.rules.investimento}% sobre entradas. Só daqui sai capital para empresas — nunca da caixa delas nem do operacional.`,
     tone: "info",
   };
 
   const tuni = partyOf(state, "tuni-pag");
-  const terceiros = roundKz(partyOf(state, "lenu") + partyOf(state, "eduardo-gta"));
   const divida: Decision = {
     question: "Tenho alguma dívida prioritária?",
     answer:
-      own > 0
-        ? `Sim — ${own.toLocaleString("pt-PT")} Kz à PDS.`
-        : tuni > 0
-          ? `Sim — Tuni ${tuni.toLocaleString("pt-PT")} Kz.`
-          : pay > 0
-            ? `Sim — ${pay.toLocaleString("pt-PT")} Kz a pagar.`
-            : "Nenhuma dívida pessoal em aberto.",
-    detail:
-      own > 0
-        ? "A conta corrente do proprietário é estrutural: devolver à PDS é repor o capital da empresa, não é um favor."
-        : tuni > 0
-          ? `Tuni é a dívida pessoal activa. Lenu + Eduardo (GTA) são ${terceiros.toLocaleString("pt-PT")} Kz de terceiros na tua liquidez — não são dívida tua a juros, mas não são teus.`
-          : "Confirma os nomes em a pagar.",
-    tone: own > 0 || tuni > 0 ? "warn" : "info",
+      m.contaCorrenteProprietario > 0
+        ? `Sim — ${m.contaCorrenteProprietario.toLocaleString("pt-PT")} Kz conta corrente PDS.`
+        : m.dividaPropria > 0
+          ? `Sim — ${m.dividaPropria.toLocaleString("pt-PT")} Kz dívida própria (ex. Tuni ${tuni.toLocaleString("pt-PT")}).`
+          : "Nenhuma dívida própria em aberto.",
+    detail: `Dívida própria: ${m.dividaPropria.toLocaleString("pt-PT")} Kz. Custódia de terceiros: ${m.dividaTerceiros.toLocaleString("pt-PT")} Kz (não é tua dívida a juros, mas não é gastável). Empresa em caixa: ${m.empresa.toLocaleString("pt-PT")} Kz.`,
+    tone: m.contaCorrenteProprietario > 0 || m.dividaPropria > 0 ? "warn" : "info",
   };
 
   const podeCw: Decision = {
     question: "Posso investir na PDS?",
-    answer: u > 1 ? "Ainda não." : inv > 0 && own >= 0 ? "Só com o bolso investimento, e depois de regras." : "Não com o que está alocado hoje.",
+    answer:
+      m.alocavel > 1
+        ? "Ainda não — aloca o próprio primeiro."
+        : m.investivel > 0
+          ? "Só com o bolso investimento."
+          : "Não: bolso investimento vazio.",
     detail:
-      own > 0
-        ? `Antes de meter mais capital: deves ${own.toLocaleString("pt-PT")} Kz à PDS. Devolver não é investimento — é reembolso. Infraestrutura (500 mil) só depois de classificar a receita de julho.`
+      m.contaCorrenteProprietario > 0
+        ? `Antes de meter mais capital: ${m.contaCorrenteProprietario.toLocaleString("pt-PT")} Kz na conta corrente. Devolver = reembolso, não investimento.`
         : "Investimento do proprietário ≠ empréstimo ≠ pró-labore. O movimento tem de escolher o tipo.",
-    tone: own > 0 ? "warn" : "info",
+    tone: m.contaCorrenteProprietario > 0 ? "warn" : "info",
   };
 
   const podeRove: Decision = {
     question: "Posso colocar dinheiro na Plural?",
-    answer: u > 1 ? "Ainda não." : inv > 0 ? "Sim, como investimento do proprietário — não como despesa pessoal." : "Não: bolso investimento vazio.",
-    detail: "Produto IPTV ainda sem qualidade fechada. Capital novo deve ir para estabilidade e cobrança, não para captação dos 7 potenciais.",
+    answer:
+      m.alocavel > 1
+        ? "Ainda não."
+        : m.investivel > 0
+          ? "Sim, como investimento do proprietário — não como despesa pessoal."
+          : "Não: bolso investimento vazio.",
+    detail: "Capital novo deve ir para estabilidade e cobrança. Caixa Plural não é bolso pessoal.",
     tone: "info",
   };
 
   const acima: Decision = {
     question: "Estou a gastar acima do planeado?",
-    answer: fluxo.despesas === 0 ? "Ainda não há despesas pessoais neste mês." : over ? "Sim." : "Não, dentro das regras.",
-    detail: `Despesas pessoais do mês: ${fluxo.despesas.toLocaleString("pt-PT")} Kz. Tecto de despesas+lazer sobre o salário GSA: ${(split.despesas + split.lazer).toLocaleString("pt-PT")} Kz.`,
+    answer:
+      fluxo.despesas === 0
+        ? "Ainda não há despesas pessoais reais neste mês."
+        : over
+          ? "Sim."
+          : "Não, dentro do tecto simulado.",
+    detail: `Despesas reais do mês: ${fluxo.despesas.toLocaleString("pt-PT")} Kz (não o salário declarado). Entradas reais: ${fluxo.entradas.toLocaleString("pt-PT")} Kz · pagamentos de dívida: ${fluxo.dividasPagas.toLocaleString("pt-PT")} · interempresa: ${fluxo.interempresa.toLocaleString("pt-PT")}. Tecto simulado (regras × salário GSA): ${tectoGastoPlaneado.toLocaleString("pt-PT")} Kz.`,
     tone: over ? "bad" : "ok",
   };
 
@@ -482,4 +899,108 @@ export function cwJulyUnclassified(state: AppState) {
       .filter((m) => m.entityId === "cw" && m.kind === "receita" && inMonth(m.at, "2026-07"))
       .reduce((s, m) => s + m.amount, 0),
   );
+}
+
+// —— Openings: não reescrever silenciosamente após movimentos ——
+
+function movementTouchesLiquidity(m: Movement, accountId: string) {
+  if (m.kind === "alocacao") return false;
+  if (m.from.type === "world" && m.to.type === "world") return false;
+  return hit(m.to, "liquidity", accountId) || hit(m.from, "liquidity", accountId);
+}
+
+function movementTouchesParty(m: Movement, partyId: string) {
+  return hit(m.to, "party", partyId) || hit(m.from, "party", partyId);
+}
+
+/** Há movimentos (exceto alocação / stub world→world) que afectam esta conta. */
+export function accountHasLedgerMovements(state: AppState, accountId: string) {
+  return state.movements.some((m) => movementTouchesLiquidity(m, accountId));
+}
+
+export function partyHasLedgerMovements(state: AppState, partyId: string) {
+  return state.movements.some((m) => movementTouchesParty(m, partyId));
+}
+
+export function canEditAccountOpening(state: AppState, accountId: string) {
+  return !accountHasLedgerMovements(state, accountId);
+}
+
+export function canEditPartyOpening(state: AppState, partyId: string) {
+  return !partyHasLedgerMovements(state, partyId);
+}
+
+export type OpeningEditResult =
+  | { ok: true; state: AppState }
+  | { ok: false; reason: string; state: AppState };
+
+/** Define opening só se ainda não houver movimentos no ledger dessa conta. */
+export function applyAccountOpening(state: AppState, accountId: string, opening: number): OpeningEditResult {
+  if (!state.accounts.some((a) => a.id === accountId)) {
+    return { ok: false, reason: "Conta inexistente.", state };
+  }
+  if (!canEditAccountOpening(state, accountId)) {
+    return {
+      ok: false,
+      reason: "Opening bloqueado: já existem movimentos. Usa um ajuste auditado.",
+      state,
+    };
+  }
+  return {
+    ok: true,
+    state: {
+      ...state,
+      accounts: state.accounts.map((a) => (a.id === accountId ? { ...a, opening } : a)),
+    },
+  };
+}
+
+export function applyPartyOpening(state: AppState, partyId: string, opening: number): OpeningEditResult {
+  if (!state.parties.some((p) => p.id === partyId)) {
+    return { ok: false, reason: "Party inexistente.", state };
+  }
+  if (!canEditPartyOpening(state, partyId)) {
+    return {
+      ok: false,
+      reason: "Opening da party bloqueado: já existem movimentos. Usa um ajuste auditado.",
+      state,
+    };
+  }
+  return {
+    ok: true,
+    state: {
+      ...state,
+      parties: state.parties.map((p) => (p.id === partyId ? { ...p, opening } : p)),
+    },
+  };
+}
+
+/**
+ * Corrige o saldo vivo sem alterar o opening: cria movimento `ajuste`.
+ * target = saldo desejado em liquidityOf.
+ */
+export function postLiquidityAdjustment(
+  state: AppState,
+  accountId: string,
+  targetBalance: number,
+  opts?: { at?: string; note?: string; id?: string },
+): OpeningEditResult {
+  const acc = state.accounts.find((a) => a.id === accountId);
+  if (!acc) return { ok: false, reason: "Conta inexistente.", state };
+  const current = liquidityOf(state, accountId);
+  const diff = roundKz(targetBalance - current);
+  if (diff === 0) return { ok: true, state };
+
+  const amount = Math.abs(diff);
+  const m: Movement = {
+    id: opts?.id ?? `ajuste-${accountId}-${Date.now()}`,
+    at: opts?.at ?? state.asOf,
+    kind: "ajuste",
+    amount,
+    from: diff > 0 ? { type: "world" } : { type: "liquidity", id: accountId },
+    to: diff > 0 ? { type: "liquidity", id: accountId } : { type: "world" },
+    entityId: acc.entityId,
+    note: opts?.note ?? `Ajuste auditado de saldo (${current} → ${targetBalance})`,
+  };
+  return { ok: true, state: { ...state, movements: [m, ...state.movements] } };
 }
