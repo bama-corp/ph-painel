@@ -102,12 +102,30 @@ export function seedState(): AppState {
       { id: "rp7", name: "Potencial IPTV 7", product: "iptv", price: 9500, dueDay: 1, status: "potencial", lastPayment: null, nextPayment: null },
     ],
     recurring: [
-      { id: "func-cw", entityId: "cw", name: "Funcionário", amount: 35000, nature: "fixo" },
-      { id: "salario", entityId: "pessoal", name: "Salário GSA", amount: 220000, nature: "fixo" },
+      { id: "func-cw", entityId: "cw", name: "Funcionário", amount: 35000, nature: "fixo", active: true },
+      {
+        id: "rove-netflix",
+        entityId: "rove",
+        name: "Contas Netflix (lotes)",
+        amount: 12000,
+        nature: "variavel",
+        product: "netflix",
+        active: true,
+      },
+      {
+        id: "rove-iptv",
+        entityId: "rove",
+        name: "Plataforma IPTV",
+        amount: 25000,
+        nature: "fixo",
+        product: "iptv",
+        active: true,
+      },
     ],
     incomeSources: [
       { id: "gsa", name: "Salário GSA", amount: 220000, active: true },
     ],
+    budgetLines: [],
     declared: {
       cwRevenueJuly: 86460,
       roveRevenue: 83500,

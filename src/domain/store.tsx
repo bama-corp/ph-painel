@@ -20,8 +20,38 @@ import {
   applySplitMethodRules,
   detectBudgetMethodId,
 } from "./definicaoRules";
-import type { AppState, BudgetRules, IncomeSource, Movement, NotebookEntry, Party, RoveClient } from "./types";
+import type {
+  AppState,
+  BudgetBucket,
+  BudgetLine,
+  BudgetRules,
+  CostNature,
+  IncomeSource,
+  Movement,
+  NotebookEntry,
+  Party,
+  RecurringCost,
+  RoveClient,
+} from "./types";
 import { roundKz, uid } from "./money";
+
+const BUDGET_BUCKETS: BudgetBucket[] = [
+  "obrigacoes",
+  "reserva",
+  "investimento",
+  "despesas",
+  "lazer",
+];
+
+const COST_NATURES: CostNature[] = ["fixo", "variavel", "investimento", "retirada"];
+
+function isBudgetBucket(v: string): v is BudgetBucket {
+  return (BUDGET_BUCKETS as string[]).includes(v);
+}
+
+function isCostNature(v: string): v is CostNature {
+  return (COST_NATURES as string[]).includes(v);
+}
 
 type Store = {
   state: AppState;
@@ -56,6 +86,12 @@ type Store = {
   addIncomeSource: (draft: Omit<IncomeSource, "id">) => { ok: true; id: string } | { ok: false; reason: string };
   setIncomeSource: (id: string, patch: Partial<Omit<IncomeSource, "id">>) => void;
   removeIncomeSource: (id: string) => { ok: true } | { ok: false; reason: string };
+  addBudgetLine: (draft: Omit<BudgetLine, "id">) => { ok: true; id: string } | { ok: false; reason: string };
+  setBudgetLine: (id: string, patch: Partial<Omit<BudgetLine, "id">>) => void;
+  removeBudgetLine: (id: string) => { ok: true } | { ok: false; reason: string };
+  addRecurring: (draft: Omit<RecurringCost, "id">) => { ok: true; id: string } | { ok: false; reason: string };
+  setRecurring: (id: string, patch: Partial<Omit<RecurringCost, "id">>) => void;
+  removeRecurring: (id: string) => { ok: true } | { ok: false; reason: string };
   addNote: (n: Omit<NotebookEntry, "id">) => void;
   setNote: (id: string, patch: Partial<NotebookEntry>) => void;
   removeNote: (id: string) => void;
@@ -324,6 +360,100 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...s,
           incomeSources: list.filter((x) => x.id !== id),
         });
+      });
+      return result;
+    },
+    addBudgetLine: (draft) => {
+      const name = draft.name.trim();
+      if (!name) return { ok: false as const, reason: "Indica o nome (ex. Renda, Internet)." };
+      if (!isBudgetBucket(draft.bucket)) return { ok: false as const, reason: "Categoria inválida." };
+      if (!(draft.amount >= 0)) return { ok: false as const, reason: "Valor inválido." };
+      const id = uid("bl");
+      setState((s) => ({
+        ...s,
+        budgetLines: [
+          ...(s.budgetLines ?? []),
+          {
+            id,
+            bucket: draft.bucket,
+            name,
+            amount: roundKz(draft.amount),
+            active: draft.active !== false,
+          },
+        ],
+      }));
+      return { ok: true as const, id };
+    },
+    setBudgetLine: (id, patch) =>
+      setState((s) => ({
+        ...s,
+        budgetLines: (s.budgetLines ?? []).map((line) => {
+          if (line.id !== id) return line;
+          const next = { ...line, ...patch };
+          if (patch.name !== undefined) next.name = patch.name.trim() || line.name;
+          if (patch.amount !== undefined) next.amount = roundKz(patch.amount);
+          if (patch.bucket !== undefined && isBudgetBucket(patch.bucket)) next.bucket = patch.bucket;
+          return next;
+        }),
+      })),
+    removeBudgetLine: (id) => {
+      let result: { ok: true } | { ok: false; reason: string } = { ok: false, reason: "Estado indisponível." };
+      setState((s) => {
+        const list = s.budgetLines ?? [];
+        if (!list.some((x) => x.id === id)) {
+          result = { ok: false, reason: "Linha inexistente." };
+          return s;
+        }
+        result = { ok: true };
+        return { ...s, budgetLines: list.filter((x) => x.id !== id) };
+      });
+      return result;
+    },
+    addRecurring: (draft) => {
+      const name = draft.name.trim();
+      if (!name) return { ok: false as const, reason: "Indica o nome do custo." };
+      if (!(draft.amount >= 0)) return { ok: false as const, reason: "Valor inválido." };
+      if (!isCostNature(draft.nature)) return { ok: false as const, reason: "Natureza inválida." };
+      const id = uid("rc");
+      setState((s) => ({
+        ...s,
+        recurring: [
+          ...(s.recurring ?? []),
+          {
+            id,
+            entityId: draft.entityId,
+            name,
+            amount: roundKz(draft.amount),
+            nature: draft.nature,
+            product: draft.product,
+            active: draft.active !== false,
+          },
+        ],
+      }));
+      return { ok: true as const, id };
+    },
+    setRecurring: (id, patch) =>
+      setState((s) => ({
+        ...s,
+        recurring: (s.recurring ?? []).map((row) => {
+          if (row.id !== id) return row;
+          const next = { ...row, ...patch };
+          if (patch.name !== undefined) next.name = patch.name.trim() || row.name;
+          if (patch.amount !== undefined) next.amount = roundKz(patch.amount);
+          if (patch.nature !== undefined && isCostNature(patch.nature)) next.nature = patch.nature;
+          return next;
+        }),
+      })),
+    removeRecurring: (id) => {
+      let result: { ok: true } | { ok: false; reason: string } = { ok: false, reason: "Estado indisponível." };
+      setState((s) => {
+        const list = s.recurring ?? [];
+        if (!list.some((x) => x.id === id)) {
+          result = { ok: false, reason: "Custo inexistente." };
+          return s;
+        }
+        result = { ok: true };
+        return { ...s, recurring: list.filter((x) => x.id !== id) };
       });
       return result;
     },

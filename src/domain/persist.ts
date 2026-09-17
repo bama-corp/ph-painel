@@ -1,8 +1,27 @@
 import { seedState } from "./seed";
-import type { AppState, IncomeSource, OwnershipClass, Party } from "./types";
+import type {
+  AppState,
+  BudgetBucket,
+  BudgetLine,
+  CostNature,
+  IncomeSource,
+  OwnershipClass,
+  Party,
+  RecurringCost,
+} from "./types";
 import { SCHEMA_VERSION } from "./types";
 import { roundKz } from "./money";
 import { detectBudgetMethodId } from "./definicaoRules";
+
+const BUDGET_BUCKETS = new Set<BudgetBucket>([
+  "obrigacoes",
+  "reserva",
+  "investimento",
+  "despesas",
+  "lazer",
+]);
+
+const COST_NATURES = new Set<CostNature>(["fixo", "variavel", "investimento", "retirada"]);
 
 export const STORAGE_KEY = "ph-painel-v3";
 export const CORRUPT_BACKUP_KEY = "ph-painel-v3-last-corrupt";
@@ -107,10 +126,45 @@ export function migrate(state: AppState): AppState {
     rules,
     budgetMethodId,
     declared,
-    recurring: state.recurring ?? seed.recurring,
+    recurring: migrateRecurring(state, seed),
     incomeSources,
+    budgetLines: migrateBudgetLines(state),
     roveClients: state.roveClients ?? seed.roveClients,
   };
+}
+
+function migrateRecurring(state: AppState, seed: AppState): RecurringCost[] {
+  const raw = Array.isArray(state.recurring) ? state.recurring : [];
+  const mapped: RecurringCost[] = raw
+    .filter((r) => r && r.entityId && r.name)
+    .map((r) => ({
+      id: String(r.id || `rc-${Math.random().toString(36).slice(2, 8)}`),
+      entityId: r.entityId,
+      name: String(r.name).trim() || "Custo",
+      amount: roundKz(Number(r.amount) || 0),
+      nature: (COST_NATURES.has(r.nature as CostNature) ? r.nature : "fixo") as CostNature,
+      product: r.product,
+      active: r.active !== false,
+    }));
+  const ids = new Set(mapped.map((r) => r.id));
+  // Acrescenta recorrentes do seed em falta (ex. Plural após upgrade).
+  for (const s of seed.recurring) {
+    if (!ids.has(s.id)) mapped.push({ ...s, active: s.active !== false });
+  }
+  return mapped;
+}
+
+function migrateBudgetLines(state: AppState): BudgetLine[] {
+  if (!Array.isArray(state.budgetLines)) return [];
+  return state.budgetLines
+    .filter((l) => l && BUDGET_BUCKETS.has(l.bucket as BudgetBucket))
+    .map((l) => ({
+      id: String(l.id || `bl-${Math.random().toString(36).slice(2, 8)}`),
+      bucket: l.bucket as BudgetBucket,
+      name: String(l.name || "Linha").trim() || "Linha",
+      amount: roundKz(Number(l.amount) || 0),
+      active: l.active !== false,
+    }));
 }
 
 function migrateIncomeSources(state: AppState, seed: AppState): IncomeSource[] {

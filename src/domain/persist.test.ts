@@ -61,6 +61,23 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(next.incomeSources[0]?.amount).toBe(220_000);
     expect(next.declared.salary).toBe(220_000);
     expect(next.budgetMethodId).toBe("ph-bolsos");
+    expect(next.budgetLines).toEqual([]);
+  });
+
+  it("migrate preserva budgetLines e sobe para schema 7", () => {
+    const legacy = {
+      ...seedState(),
+      schemaVersion: 6,
+      budgetLines: [
+        { id: "bl1", bucket: "obrigacoes", name: "Renda", amount: 80_000, active: true },
+      ],
+    } as unknown as AppState;
+
+    const next = migrate(legacy);
+    expect(next.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(next.budgetLines).toHaveLength(1);
+    expect(next.budgetLines[0]?.name).toBe("Renda");
+    expect(next.budgetLines[0]?.amount).toBe(80_000);
   });
 
   it("export JSON inclui schemaVersion e preserva seed numbers", () => {

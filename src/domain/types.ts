@@ -6,7 +6,7 @@ export const COMPANIES: Exclude<EntityId, "pessoal">[] = ["cw", "rove", "picasso
 export type OwnershipClass = "own" | "custody" | "company";
 
 /** Versão actual do schema persistido. */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 8;
 
 export type MovementKind =
   | "receita"
@@ -105,6 +105,21 @@ export type BudgetRules = {
   lazer: number;
 };
 
+/** Chave de categoria orçamentária (= campo de BudgetRules). */
+export type BudgetBucket = keyof BudgetRules;
+
+/**
+ * Linha de planeamento dentro de uma categoria (%).
+ * Ex.: Obrigações → «Renda», «Internet», «Tuni». Não move dinheiro — é o inventário do tecto.
+ */
+export type BudgetLine = {
+  id: string;
+  bucket: BudgetBucket;
+  name: string;
+  amount: number;
+  active: boolean;
+};
+
 export type RoveProduct = "netflix" | "iptv";
 
 export type RoveStatus =
@@ -133,6 +148,8 @@ export type RecurringCost = {
   amount: number;
   nature: CostNature;
   product?: RoveProduct | "geral";
+  /** Planeamento: se false, não entra no tecto / lucro esperado. */
+  active: boolean;
 };
 
 export type Declared = {
@@ -174,6 +191,8 @@ export type AppState = {
   recurring: RecurringCost[];
   /** Fontes de renda planeadas (GSA, freelance, …). Fonte de verdade do planeamento. */
   incomeSources: IncomeSource[];
+  /** Linhas concretas por categoria (o que entra nos 30% de obrigações, etc.). */
+  budgetLines: BudgetLine[];
   declared: Declared;
   notes: NotebookEntry[];
 };

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { liveRoveStatus, lucroMes, receitaMes, roveCounts, roveMrr, unitEconomics } from "../domain/engine";
+import { liveRoveStatus, roveCounts, roveMrr, unitEconomics } from "../domain/engine";
 import { ENTITY } from "../domain/labels";
 import { useStore } from "../domain/store";
 import type { RoveProduct, RoveStatus } from "../domain/types";
+import { CompanyAccounts, CompanyOutlook, CompanyRecurring } from "../ui/CompanyOps";
 import { Money } from "../ui/Money";
 import { MoveForm } from "../ui/MoveForm";
 import { Mark, PageHeader, Section, Stat, TotalRow } from "../ui/Page";
@@ -40,13 +41,16 @@ export function Rove() {
         <MoveForm defaultEntity="rove" />
       </div>
 
-      <dl className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-        <Stat label="MRR (activos / atraso / suspenso)" n={mrr} mark={meta.tone} />
-        <Stat label="Receita declarada" n={state.declared.roveRevenue} mark={meta.tone} />
-        <Stat label="Lucro declarado" n={state.declared.roveProfit} mark={meta.tone} />
-        <Stat label="Receita registada no mês" n={receitaMes(state, "rove")} mark="soft" />
-        <Stat label="Lucro registado no mês" n={lucroMes(state, "rove")} mark="soft" />
-      </dl>
+      <CompanyOutlook
+        entity="rove"
+        extra={
+          <>
+            <Stat label="MRR (activos / atraso / suspenso)" n={mrr} mark={meta.tone} />
+            <Stat label="Receita declarada" n={state.declared.roveRevenue} mark={meta.tone} />
+            <Stat label="Lucro declarado" n={state.declared.roveProfit} mark={meta.tone} />
+          </>
+        }
+      />
 
       <div className="mt-10 flex flex-wrap gap-x-7 gap-y-2 border-y border-ink/10 py-4 text-sm">
         {ST.map((s) => (
@@ -60,6 +64,8 @@ export function Rove() {
         <Unit title="Netflix" u={netflix} />
         <Unit title="IPTV" u={iptv} />
       </div>
+
+      <CompanyRecurring entity="rove" showProduct />
 
       <Section title="Clientes" mark={meta.tone}>
         <div className="overflow-x-auto">
@@ -101,6 +107,8 @@ export function Rove() {
         </div>
         <AddClient />
       </Section>
+
+      <CompanyAccounts entity="rove" />
     </div>
   );
 }
@@ -129,7 +137,7 @@ function Unit({ title, u }: { title: string; u: ReturnType<typeof unitEconomics>
       </TotalRow>
       {u.perClientCost === 0 && (
         <p className="mt-3 text-xs text-copper">
-          Custos Plural ainda não registados em recorrentes — margem incompleta.
+          Sem custos activos neste produto — edita «Custos recorrentes» abaixo.
         </p>
       )}
     </div>

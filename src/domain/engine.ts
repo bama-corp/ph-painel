@@ -3,6 +3,7 @@ import { COMPANIES } from "./types";
 import type {
   Alert,
   AppState,
+  BudgetBucket,
   BudgetRules,
   CostNature,
   CwCategory,
@@ -267,12 +268,52 @@ export function ownerCurrent(state: AppState) {
   return p ? partyOf(state, p.id) : partyOf(state, "emanuel-cw");
 }
 
+/** Conta corrente do proprietário nesta empresa (0 se não existir party). */
+export function ownerCurrentFor(state: AppState, entity: EntityId) {
+  const p = state.parties.find((x) => x.role === "owner_current" && x.entityId === entity);
+  return p ? partyOf(state, p.id) : 0;
+}
+
 export function equity(state: AppState, entity: EntityId) {
   const cash = liquidityByEntity(state, entity);
   const rec = partiesSum(state, entity, "receber");
   const pay = partiesSum(state, entity, "pagar");
   const eq = assetsOf(state, entity);
   return roundKz(cash + rec + eq - pay);
+}
+
+/** Custos recorrentes activos desta empresa (planeamento mensal). */
+export function recurringOf(state: AppState, entity: EntityId) {
+  return (state.recurring ?? []).filter((r) => r.entityId === entity && r.active !== false);
+}
+
+export function recurringPlanned(state: AppState, entity: EntityId) {
+  return roundKz(recurringOf(state, entity).reduce((s, r) => s + r.amount, 0));
+}
+
+/**
+ * Visão do mês: registado vs planeado.
+ * lucroEsperado = receita − max(despesas registadas, custos planeados) —
+ * se ainda não registaste o fixo, o lucro “real” engana para cima.
+ */
+export function companyMonthOutlook(state: AppState, entity: EntityId, month = state.month) {
+  const receita = receitaMes(state, entity, month);
+  const desp = despesaMes(state, entity, month);
+  const planned = recurringPlanned(state, entity);
+  const lucroRegistado = lucroMes(state, entity, month);
+  const baseCusto = Math.max(desp, planned);
+  const lucroEsperado = roundKz(receita - baseCusto);
+  const porRegistar = roundKz(Math.max(0, planned - desp));
+  return {
+    receita,
+    desp,
+    planned,
+    lucroRegistado,
+    lucroEsperado,
+    porRegistar,
+    equity: equity(state, entity),
+    ownerDue: ownerCurrentFor(state, entity),
+  };
 }
 
 export function patrimonioPessoal(state: AppState) {
@@ -355,11 +396,18 @@ export function unitEconomics(state: AppState, product: RoveProduct) {
   const n = clients.length;
   const custos = roundKz(
     state.recurring
-      .filter((r) => r.entityId === "rove" && (r.product === product || r.product === "geral"))
+      .filter(
+        (r) =>
+          r.entityId === "rove" &&
+          r.active !== false &&
+          (r.product === product || r.product === "geral"),
+      )
       .reduce((s, r) => s + r.amount, 0),
   );
   const custoGeral = roundKz(
-    state.recurring.filter((r) => r.entityId === "rove" && r.product === "geral").reduce((s, r) => s + r.amount, 0),
+    state.recurring
+      .filter((r) => r.entityId === "rove" && r.active !== false && r.product === "geral")
+      .reduce((s, r) => s + r.amount, 0),
   );
   const share = n === 0 ? 0 : custos / Math.max(n, 1);
   const perClientRevenue = n === 0 ? 0 : roundKz(receita / n);
@@ -536,6 +584,35 @@ export function plannedIncomeTotal(state: AppState) {
   return roundKz(
     (state.incomeSources ?? []).filter((s) => s.active).reduce((sum, s) => sum + s.amount, 0),
   );
+}
+
+/** Linhas activas de uma categoria orçamentária. */
+export function budgetLinesOf(state: AppState, bucket: BudgetBucket) {
+  return (state.budgetLines ?? []).filter((l) => l.bucket === bucket && l.active);
+}
+
+/** Soma planeada das linhas activas numa categoria. */
+export function budgetLinesTotal(state: AppState, bucket: BudgetBucket) {
+  return roundKz(budgetLinesOf(state, bucket).reduce((sum, l) => sum + l.amount, 0));
+}
+
+/**
+ * Compara inventário (linhas) vs tecto da % × renda planeada.
+ * gap > 0 → linhas acima do tecto; gap < 0 → ainda há margem.
+ */
+export function budgetBucketGap(
+  state: AppState,
+  bucket: BudgetBucket,
+  rules: BudgetRules = state.rules,
+) {
+  const ceiling = splitSalary(plannedIncomeTotal(state), rules)[bucket];
+  const planned = budgetLinesTotal(state, bucket);
+  return {
+    planned,
+    ceiling,
+    gap: roundKz(planned - ceiling),
+    hasLines: budgetLinesOf(state, bucket).length > 0,
+  };
 }
 
 /** Mantém declared.salary = plannedIncomeTotal (compat). */
@@ -981,7 +1058,33 @@ export function buildDecisions(state: AppState): Decision[] {
     });
   }
 
-  // 9 — Fallback
+  // 9 — Inventário das % (linhas concretas)
+  if (planned > 0) {
+    const ob = budgetBucketGap(state, "obrigacoes");
+    if (!ob.hasLines) {
+      out.push({
+        id: "linhas-obrigacoes",
+        question: "O que entra nos 30% de obrigações?",
+        answer: "Ainda não listaste.",
+        detail: `Tecto ${kzAnswer(ob.ceiling)}. No Orçamento, em «O que entra em cada %», adiciona renda, luz, internet, dívidas fixas, etc.`,
+        tone: "info",
+      });
+    }
+    const overBuckets = (["obrigacoes", "despesas", "lazer", "reserva", "investimento"] as const)
+      .map((b) => ({ b, g: budgetBucketGap(state, b) }))
+      .filter(({ g }) => g.hasLines && g.gap > 1);
+    for (const { b, g } of overBuckets) {
+      out.push({
+        id: `tecto-${b}`,
+        question: `Linhas de ${b} cabem no tecto?`,
+        answer: `Não — ${kzAnswer(g.planned)} vs tecto ${kzAnswer(g.ceiling)}.`,
+        detail: `Excesso ${kzAnswer(g.gap)}. Reduz linhas, sobe a % nesta categoria, ou sobe a renda planeada.`,
+        tone: "warn",
+      });
+    }
+  }
+
+  // 10 — Fallback
   if (out.length === 0) {
     out.push({
       id: "ok",

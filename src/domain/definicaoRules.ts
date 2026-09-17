@@ -63,7 +63,7 @@ export const DEFINICAO_SECTIONS: RuleSection[] = [
   {
     id: "obrigacoes",
     title: "Obrigações",
-    lede: "Despesas fixas e essenciais — o que não podes falhar.",
+    lede: "Despesas fixas e essenciais — o que não podes falhar. Lista concreta (renda, luz, …) no Orçamento → «O que entra em cada %».",
     rules: [
       {
         id: "regra-50",

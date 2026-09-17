@@ -52,12 +52,12 @@ const RITMO = [
 const MENUS = [
   { to: "/", label: "Eu", d: "Visão geral. De quem é o dinheiro." },
   { to: "/definicao", label: "Definição", d: "Regras de funcionamento do painel." },
-  { to: "/orcamento", label: "Orçamento", d: "Fontes, % dos bolsos e Meter." },
+  { to: "/orcamento", label: "Orçamento", d: "Fontes, % dos bolsos, inventário (renda, luz…) e Meter." },
   { to: "/contas", label: "Contas", d: "Bancos, a receber, a pagar." },
-  { to: "/pds", label: "PDS", d: "Caixa e operação PADStation." },
-  { to: "/plural", label: "Plural", d: "Recorrência e clientes." },
-  { to: "/picasso", label: "Picasso's", d: "Caixa da empresa." },
-  { to: "/ph", label: "PH", d: "Caixa da empresa PH." },
+  { to: "/pds", label: "PDS", d: "Caixa, categorias, custos recorrentes e equity." },
+  { to: "/plural", label: "Plural", d: "MRR, clientes, custos por produto e margem." },
+  { to: "/picasso", label: "Picasso's", d: "Caixa, custos planeados e equity." },
+  { to: "/ph", label: "PH", d: "Caixa, custos planeados e equity." },
   { to: "/movimentos", label: "Registo", d: "Tudo o que aconteceu." },
   { to: "/decisao", label: "Decisão", d: "O que fazer agora." },
 ];
