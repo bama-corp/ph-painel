@@ -80,6 +80,91 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(next.budgetLines[0]?.amount).toBe(80_000);
   });
 
+  it("migrate v8→v9 aplica BAI 2 PDS + conta corrente", () => {
+    const base = seedState();
+    const legacy = {
+      ...base,
+      schemaVersion: 8,
+      accounts: base.accounts.map((a) =>
+        a.id === "cw-bai2" ? { ...a, opening: 57_250 } : a,
+      ),
+      parties: base.parties.map((p) => (p.id === "emanuel-cw" ? { ...p, opening: 0 } : p)),
+    } as unknown as AppState;
+
+    const next = migrate(legacy);
+    expect(next.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(next.accounts.find((a) => a.id === "cw-bai2")?.opening).toBe(10_711.38);
+    expect(next.parties.find((p) => p.id === "emanuel-cw")?.opening).toBe(89_200);
+    expect(next.accounts.find((a) => a.id === "bai2-p")).toBeUndefined();
+  });
+
+  it("migrate v10→v11 remove BAI 2 — teu", () => {
+    const base = seedState();
+    const legacy = {
+      ...base,
+      schemaVersion: 10,
+      accounts: [
+        ...base.accounts,
+        {
+          id: "bai2-p",
+          entityId: "pessoal" as const,
+          name: "BAI 2 — teu",
+          kind: "banco" as const,
+          opening: 219_708,
+        },
+      ],
+    };
+
+    const next = migrate(legacy);
+    expect(next.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(next.accounts.find((a) => a.id === "bai2-p")).toBeUndefined();
+  });
+
+  it("migrate v11→v12 liga custódia ao ATLANTICO e renomeia a conta", () => {
+    const base = seedState();
+    const legacy = {
+      ...base,
+      schemaVersion: 11,
+      accounts: base.accounts.map((a) =>
+        a.id === "atlantico" ? { ...a, name: "ATLANTICO — teu" } : a,
+      ),
+      parties: base.parties.map((p) => {
+        if (p.id !== "lenu" && p.id !== "eduardo-gta") return p;
+        const { heldInAccountId: _h, ...rest } = p;
+        return rest;
+      }),
+    } as unknown as AppState;
+
+    const next = migrate(legacy);
+    expect(next.accounts.find((a) => a.id === "atlantico")?.name).toBe("ATLANTICO");
+    expect(next.parties.find((p) => p.id === "lenu")?.heldInAccountId).toBe("atlantico");
+    expect(next.parties.find((p) => p.id === "eduardo-gta")?.heldInAccountId).toBe("atlantico");
+  });
+
+  it("migrate não ressuscita party removida (ex. Meneza)", () => {
+    const base = seedState();
+    const legacy = {
+      ...base,
+      schemaVersion: 12,
+      parties: [
+        ...base.parties,
+        {
+          id: "meneza",
+          entityId: "pessoal" as const,
+          name: "Meneza (pago)",
+          side: "pagar" as const,
+          opening: 0,
+          ownership: "own" as const,
+        },
+      ],
+      removedPartyIds: ["meneza"],
+    };
+
+    const next = migrate(legacy);
+    expect(next.parties.find((p) => p.id === "meneza")).toBeUndefined();
+    expect(next.removedPartyIds).toContain("meneza");
+  });
+
   it("export JSON inclui schemaVersion e preserva seed numbers", () => {
     const s = seedState();
     const json = exportStateJson(s);
@@ -89,5 +174,6 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(parsed.parties.find((p) => p.id === "lenu")?.opening).toBe(437600);
     expect(parsed.accounts.find((a) => a.id === "stand")?.opening).toBe(1_000_000);
     expect(parsed.incomeSources?.[0]?.amount).toBe(220_000);
+    expect(parsed.accounts.find((a) => a.id === "bai2-p")).toBeUndefined();
   });
 });

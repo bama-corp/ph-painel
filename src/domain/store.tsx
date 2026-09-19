@@ -59,6 +59,8 @@ type Store = {
   syncStatus: "idle" | "loading" | "saving" | "synced" | "offline" | "error";
   syncError: string | null;
   addMovement: (m: Omit<Movement, "id">) => MovementResult;
+  /** Apaga um movimento (correcção). Os saldos recalculam-se a partir do ledger. */
+  removeMovement: (id: string) => { ok: true } | { ok: false; reason: string };
   payParty: (opts: {
     partyId: string;
     accountId: string;
@@ -192,6 +194,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return result;
     },
+    removeMovement: (id) => {
+      let result: { ok: true } | { ok: false; reason: string } = {
+        ok: false,
+        reason: "Estado indisponível.",
+      };
+      setState((s) => {
+        if (!s.movements.some((m) => m.id === id)) {
+          result = { ok: false, reason: "Movimento inexistente." };
+          return s;
+        }
+        result = { ok: true };
+        return { ...s, movements: s.movements.filter((m) => m.id !== id) };
+      });
+      return result;
+    },
     payParty: (opts) => {
       let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {
@@ -282,7 +299,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return s;
         }
         result = { ok: true };
-        return { ...s, parties: s.parties.filter((x) => x.id !== id) };
+        return {
+          ...s,
+          parties: s.parties.filter((x) => x.id !== id),
+          removedPartyIds: [...new Set([...(s.removedPartyIds ?? []), id])],
+        };
       });
       return result;
     },

@@ -1,7 +1,9 @@
 import { type ReactNode, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   companyMonthOutlook,
   equity,
+  KIND_LABEL,
   liquidityByEntity,
   liquidityOf,
   partiesSum,
@@ -10,7 +12,7 @@ import {
   recurringPlanned,
 } from "../domain/engine";
 import { ENTITY, type EntityTone } from "../domain/labels";
-import { kz, monthLabel } from "../domain/money";
+import { formatDatePt, kz, monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { CostNature, EntityId, RoveProduct } from "../domain/types";
 import { Money } from "./Money";
@@ -311,6 +313,89 @@ export function CompanyRecurring({
       <TotalRow label={`Planeado (${activeCount} activos)`} mark={meta.tone}>
         <Money n={planned} />
       </TotalRow>
+      {err ? <p className="mt-3 text-sm text-rust">{err}</p> : null}
+    </Section>
+  );
+}
+
+/** Últimos movimentos desta empresa — com apagar (correcção). */
+export function CompanyRecentMoves({
+  entity,
+  limit = 12,
+}: {
+  entity: Exclude<EntityId, "pessoal">;
+  limit?: number;
+}) {
+  const { state, removeMovement } = useStore();
+  const meta = ENTITY[entity];
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  const rows = [...state.movements]
+    .filter((m) => m.entityId === entity)
+    .reverse()
+    .slice(0, limit);
+
+  function onDelete(id: string) {
+    if (confirmId !== id) {
+      setConfirmId(id);
+      setErr("");
+      return;
+    }
+    const r = removeMovement(id);
+    if (!r.ok) {
+      setErr(r.reason);
+      return;
+    }
+    setConfirmId(null);
+    setErr("");
+  }
+
+  return (
+    <Section
+      title="Últimos movimentos"
+      mark={meta.tone}
+      hint={
+        <>
+          Errou um registo? Apaga aqui (dois cliques: Apagar → Confirmar). Lista completa em{" "}
+          <Link to="/movimentos" className="border-b border-ink/25 hover:border-ink">
+            Registo
+          </Link>
+          .
+        </>
+      }
+    >
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink/45">Ainda sem movimentos nesta empresa.</p>
+      ) : (
+        <ul className="space-y-0">
+          {rows.map((m) => (
+            <li
+              key={m.id}
+              className="flex flex-wrap items-baseline justify-between gap-3 border-b border-ink/[0.07] py-3 first:pt-0 last:border-0"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink">
+                  {KIND_LABEL[m.kind]} · <Money n={m.amount} />
+                </p>
+                <p className="mt-0.5 text-xs text-ink/40">
+                  {formatDatePt(m.at)}
+                  {m.category ? ` · ${m.category}` : ""}
+                  {m.note ? ` · ${m.note}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={`btn-ghost shrink-0 py-1 text-xs ${
+                  confirmId === m.id ? "border-rust/40 text-rust" : "text-ink/40"
+                }`}
+                onClick={() => onDelete(m.id)}
+              >
+                {confirmId === m.id ? "Confirmar apagar" : "Apagar"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {err ? <p className="mt-3 text-sm text-rust">{err}</p> : null}
     </Section>
   );

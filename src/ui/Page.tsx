@@ -62,15 +62,17 @@ export function Section({
   children,
   className = "",
   mark,
+  id,
 }: {
   title: string;
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
   mark?: MarkTone;
+  id?: string;
 }) {
   return (
-    <section className={`mt-14 sm:mt-16 ${className}`}>
+    <section id={id} className={`mt-14 scroll-mt-8 sm:mt-16 ${className}`}>
       <div className="section-head">
         <Mark tone={mark ?? "ink"} />
         <h2 className="section-title">{title}</h2>

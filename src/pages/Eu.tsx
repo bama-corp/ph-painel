@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   buildAlerts,
+  custodyInAccount,
   fluxoMes,
   liquidityByEntity,
   liquidityOf,
   lucroMes,
+  ownLiquidityOf,
   ownerCurrent,
   patrimonioPessoal,
   receitaMes,
@@ -33,7 +35,7 @@ export function Eu() {
   const owner = ownerCurrent(state);
   const fluxoSaldo =
     fluxo.entradas - fluxo.despesas - fluxo.investimentos - fluxo.dividasPagas;
-  const posicao = p.dinheiro + p.receber - p.dividas;
+  const posicao = p.proprio + p.receber - p.dividasOwn;
 
   return (
     <div className="page">
@@ -127,17 +129,27 @@ export function Eu() {
       >
         <Col meta={ENTITY.pessoal}>
           <div className="grid gap-x-10 sm:grid-cols-2 lg:grid-cols-3">
-            {banks.map((a) => (
-              <Row key={a.id} label={a.name} n={liquidityOf(state, a.id)} />
-            ))}
+            {banks.map((a) => {
+              const teu = ownLiquidityOf(state, a.id);
+              const cust = custodyInAccount(state, a.id);
+              return (
+                <div key={a.id}>
+                  <Row label={a.name} n={teu} />
+                  {cust > 0 ? (
+                    <p className="mt-0.5 text-[0.65rem] text-ink/35">
+                      + {cust.toLocaleString("pt-PT")} Kz custódia (não é teu)
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           <div className="mt-2 grid gap-x-10 gap-y-1 border-t-2 border-ink pt-4 sm:grid-cols-2 lg:grid-cols-4">
-            <TotalCell label="Liquidez bruta" mark="pine" n={p.dinheiro} />
-            <TotalCell label="Própria" mark="pine" n={p.proprio} />
+            <TotalCell label="Teu (próprio)" mark="pine" n={p.proprio} />
             <TotalCell label="Custódia" mark="soft" n={p.custodia} />
+            <TotalCell label="Bruto nos bancos" mark="soft" n={p.dinheiro} />
             <TotalCell label="A receber" mark="pine" n={p.receber} tone="in" />
             <TotalCell label="Dívida própria" mark="rust" n={p.dividasOwn} tone="out" />
-            <TotalCell label="A pagar (total)" mark="rust" n={p.dividas} tone="out" />
             <TotalCell
               label="Posição"
               mark="pine"

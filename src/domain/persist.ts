@@ -10,7 +10,7 @@ import type {
   RecurringCost,
 } from "./types";
 import { SCHEMA_VERSION } from "./types";
-import { roundKz } from "./money";
+import { roundKz, todayIso } from "./money";
 import { detectBudgetMethodId } from "./definicaoRules";
 
 const BUDGET_BUCKETS = new Set<BudgetBucket>([
@@ -73,6 +73,7 @@ function backupCorrupt(raw: string) {
  * - nunca apaga histórico silenciosamente
  */
 export function migrate(state: AppState): AppState {
+  const fromVersion = typeof state.schemaVersion === "number" ? state.schemaVersion : 0;
   const seed = seedState();
   const rename: Record<string, string> = {
     "Caixa CW": "Caixa PDS",
@@ -82,10 +83,69 @@ export function migrate(state: AppState): AppState {
     "Equipamentos CW (PS, PCs, impressoras)": "Equipamentos PDS (PS, PCs, impressoras)",
   };
 
-  const accountIds = new Set(state.accounts.map((a) => a.id));
-  const partyIds = new Set(state.parties.map((p) => p.id));
+  let accounts = state.accounts.map((a) => ({ ...a, name: rename[a.name] ?? a.name }));
+  let parties = state.parties.map((p) => {
+    const name = rename[p.name] ?? p.name;
+    const ownership = inferOwnership({ ...p, name });
+    const role =
+      p.role ??
+      (p.id === "emanuel-cw" || ownership === "company" ? ("owner_current" as const) : undefined);
+    return {
+      ...p,
+      name,
+      ownership,
+      role: p.id === "emanuel-cw" ? ("owner_current" as const) : role,
+    };
+  });
+
+  // v9 — BAI 2 PDS: 10.711,38 + conta corrente 89.200.
+  if (fromVersion < 9) {
+    accounts = accounts.map((a) =>
+      a.id === "cw-bai2" ? { ...a, opening: 10711.38 } : a,
+    );
+    parties = parties.map((p) =>
+      p.id === "emanuel-cw" ? { ...p, opening: 89200, side: "receber" as const } : p,
+    );
+  }
+  // v10 — Caixa PDS = 29.060 (snapshot).
+  if (fromVersion < 10) {
+    accounts = accounts.map((a) => (a.id === "cw-caixa" ? { ...a, opening: 29060 } : a));
+  }
+  // v11 — BAI 2 sem fatia pessoal («BAI 2 — teu» era incorrecto).
+  if (fromVersion < 11) {
+    accounts = accounts.filter((a) => a.id !== "bai2-p");
+  }
+  // v12 — custódia ligada à conta onde está; ATLANTICO deixa de se chamar «teu».
+  if (fromVersion < 12) {
+    accounts = accounts.map((a) =>
+      a.id === "atlantico" || a.name === "ATLANTICO — teu" ? { ...a, name: "ATLANTICO" } : a,
+    );
+    parties = parties.map((p) => {
+      if (p.ownership !== "custody" || p.heldInAccountId) return p;
+      if (p.id === "lenu" || p.id === "eduardo-gta") {
+        return { ...p, heldInAccountId: "atlantico" };
+      }
+      return p;
+    });
+  }
+
+  const removedPartyIds = [
+    ...new Set([...(state.removedPartyIds ?? []), ...(fromVersion < 13 ? ["meneza"] : [])]),
+  ];
+
+  // v13 — Meneza (pago, 0) sai; remoções de parties passam a ser respeitadas.
+  if (fromVersion < 13) {
+    parties = parties.filter((p) => p.id !== "meneza" && !removedPartyIds.includes(p.id));
+  } else {
+    parties = parties.filter((p) => !removedPartyIds.includes(p.id));
+  }
+
+  const accountIds = new Set(accounts.map((a) => a.id));
+  const partyIds = new Set(parties.map((p) => p.id));
   const extraAccounts = seed.accounts.filter((a) => !accountIds.has(a.id));
-  const extraParties = seed.parties.filter((p) => !partyIds.has(p.id));
+  const extraParties = seed.parties.filter(
+    (p) => !partyIds.has(p.id) && !removedPartyIds.includes(p.id),
+  );
 
   const incomeSources = migrateIncomeSources(state, seed);
   const planned = roundKz(incomeSources.filter((s) => s.active).reduce((sum, s) => sum + s.amount, 0));
@@ -99,28 +159,12 @@ export function migrate(state: AppState): AppState {
   return {
     ...state,
     schemaVersion: SCHEMA_VERSION,
+    asOf: todayIso(),
     notes: state.notes ?? [],
+    removedPartyIds,
     movements: state.movements ?? [],
-    accounts: [
-      ...state.accounts.map((a) => ({ ...a, name: rename[a.name] ?? a.name })),
-      ...extraAccounts,
-    ],
-    parties: [
-      ...state.parties.map((p) => {
-        const name = rename[p.name] ?? p.name;
-        const ownership = inferOwnership({ ...p, name });
-        const role =
-          p.role ??
-          (p.id === "emanuel-cw" || ownership === "company" ? ("owner_current" as const) : undefined);
-        return {
-          ...p,
-          name,
-          ownership,
-          role: p.id === "emanuel-cw" ? ("owner_current" as const) : role,
-        };
-      }),
-      ...extraParties,
-    ],
+    accounts: [...accounts, ...extraAccounts],
+    parties: [...parties, ...extraParties],
     assets: (state.assets ?? []).map((a) => ({ ...a, name: rename[a.name] ?? a.name })),
     envelopes: state.envelopes?.length ? state.envelopes : seed.envelopes,
     rules,

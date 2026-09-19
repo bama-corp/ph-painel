@@ -222,6 +222,48 @@ a {
     font-weight: 500;
   }
 
+  .date-menu {
+    @apply absolute left-0 z-50 mt-1.5 w-[17.5rem] py-1;
+    border: 1px solid rgb(var(--ink) / 0.16);
+    background: rgb(var(--wash) / 0.97);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 28px rgb(var(--ink) / 0.1);
+  }
+
+  .date-nav {
+    @apply flex h-7 w-7 items-center justify-center text-lg leading-none text-ink/45 transition-colors;
+  }
+
+  .date-nav:hover {
+    color: rgb(var(--ink));
+  }
+
+  .date-day {
+    @apply flex aspect-square items-center justify-center text-[0.78rem] text-ink transition-colors;
+  }
+
+  .date-day:hover {
+    background: rgb(var(--wash-deep) / 0.85);
+  }
+
+  .date-day-muted {
+    color: rgb(var(--ink) / 0.28);
+  }
+
+  .date-day-today {
+    box-shadow: inset 0 0 0 1px rgb(var(--pine) / 0.55);
+  }
+
+  .date-day-selected {
+    background: rgb(var(--ink));
+    color: rgb(var(--paper));
+  }
+
+  .date-day-selected:hover {
+    background: rgb(var(--pine));
+    color: rgb(var(--paper));
+  }
+
   .field-label {
     @apply text-[0.72rem] font-medium uppercase tracking-[0.14em];
     color: rgb(var(--ink) / 0.45);

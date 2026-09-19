@@ -82,11 +82,11 @@ describe("Passo 1 — ownership / métricas fundamentais", () => {
   });
 
   it("companyLiquidity = PDS + Plural + Picasso's + PH", () => {
-    expect(liquidityByEntity(state, "cw")).toBeCloseTo(69560, 2);
+    expect(liquidityByEntity(state, "cw")).toBeCloseTo(39771.38, 2);
     expect(liquidityByEntity(state, "rove")).toBeCloseTo(72508.78, 2);
     expect(liquidityByEntity(state, "picasso")).toBe(21500);
     expect(liquidityByEntity(state, "ph")).toBe(36500);
-    expect(companyLiquidity(state)).toBeCloseTo(69560 + 72508.78 + 21500 + 36500, 2);
+    expect(companyLiquidity(state)).toBeCloseTo(39771.38 + 72508.78 + 21500 + 36500, 2);
   });
 
   it("company nunca entra em allocatablePersonal", () => {

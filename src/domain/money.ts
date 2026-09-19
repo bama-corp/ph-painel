@@ -29,6 +29,43 @@ export const MONTHS_PT = [
   "Dezembro",
 ];
 
+const MONTHS_SHORT_PT = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
+
+/** Data local de hoje em ISO `YYYY-MM-DD`. */
+export function todayIso(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Mês local actual em ISO `YYYY-MM`. */
+export function currentMonthIso(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/** Ex.: `19 set 2026`. */
+export function formatDatePt(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTHS_SHORT_PT[m - 1]} ${y}`;
+}
+
 export function monthLabel(ym: string) {
   const [y, m] = ym.split("-").map(Number);
   return `${MONTHS_PT[(m ?? 1) - 1]} ${y}`;

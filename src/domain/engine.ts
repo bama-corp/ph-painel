@@ -130,6 +130,23 @@ export function custodyLiquidity(state: AppState) {
   );
 }
 
+/** Custódia atribuída a uma conta concreta (heldInAccountId). */
+export function custodyInAccount(state: AppState, accountId: string) {
+  return roundKz(
+    state.parties
+      .filter((p) => p.ownership === "custody" && p.heldInAccountId === accountId)
+      .reduce((s, p) => s + partyOf(state, p.id), 0),
+  );
+}
+
+/**
+ * Fatia própria numa conta = saldo − custódia marcada nessa conta.
+ * Se a custódia atribuída for maior que o saldo, o «teu» fica 0 (precisa reconciliar).
+ */
+export function ownLiquidityOf(state: AppState, accountId: string) {
+  return roundKz(Math.max(0, liquidityOf(state, accountId) - custodyInAccount(state, accountId)));
+}
+
 /** Liquidez pessoal própria = bruto − custódia. */
 export function personalOwnLiquidity(state: AppState) {
   return roundKz(Math.max(0, personalGrossLiquidity(state) - custodyLiquidity(state)));
@@ -327,7 +344,8 @@ export function patrimonioPessoal(state: AppState) {
   const receber = partiesSum(state, "pessoal", "receber", "own");
   /** Empréstimo empresa→proprietário: cash pessoal sobe, mas owner_current (a receber na empresa) é dívida do dono. */
   const dividaOwnerEmpresa = ownerCurrent(state);
-  const liquido = roundKz(dinheiro + bens + participacoes + receber - dividas - dividaOwnerEmpresa);
+  /** Património líquido próprio — custódia fora (nem no dinheiro nem nas «dívidas»). */
+  const liquido = roundKz(proprio + bens + participacoes + receber - dividasOwn - dividaOwnerEmpresa);
   return {
     dinheiro,
     proprio,

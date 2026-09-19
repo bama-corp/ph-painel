@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { NAV_LINKS } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
+import { AssistenteFab } from "../pages/Assistente";
 
 function SyncBadge() {
   const { syncStatus, syncError, pushNow, ready } = useStore();
@@ -111,6 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="px-6 pb-20 pt-8 sm:px-12 sm:pb-24 sm:pt-10 lg:px-16">{children}</main>
+      <AssistenteFab />
     </div>
   );
 }

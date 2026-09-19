@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { liveRoveStatus, roveCounts, roveMrr, unitEconomics } from "../domain/engine";
 import { ENTITY } from "../domain/labels";
+import { formatDatePt } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { RoveProduct, RoveStatus } from "../domain/types";
-import { CompanyAccounts, CompanyOutlook, CompanyRecurring } from "../ui/CompanyOps";
+import { CompanyAccounts, CompanyOutlook, CompanyRecentMoves, CompanyRecurring } from "../ui/CompanyOps";
 import { Money } from "../ui/Money";
 import { MoveForm } from "../ui/MoveForm";
 import { Mark, PageHeader, Section, Stat, TotalRow } from "../ui/Page";
@@ -52,6 +53,8 @@ export function Rove() {
         }
       />
 
+      <CompanyRecentMoves entity="rove" />
+
       <div className="mt-10 flex flex-wrap gap-x-7 gap-y-2 border-y border-ink/10 py-4 text-sm">
         {ST.map((s) => (
           <span key={s.id} className="text-ink/60">
@@ -95,7 +98,9 @@ export function Rove() {
                     <td className="py-3 pr-3">
                       <Money n={c.price} />
                     </td>
-                    <td className="num py-3 pr-3 text-ink/70">{c.nextPayment ?? "—"}</td>
+                    <td className="num py-3 pr-3 text-ink/70">
+                      {c.nextPayment ? formatDatePt(c.nextPayment) : "—"}
+                    </td>
                     <td className="py-3 pr-3">
                       <Status live={live} stored={c.status} />
                     </td>

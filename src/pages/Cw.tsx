@@ -3,10 +3,12 @@ import {
   cwByCategory,
   cwCosts,
   cwJulyUnclassified,
+  liquidityOf,
+  ownerCurrent,
 } from "../domain/engine";
 import { ENTITY } from "../domain/labels";
 import { useStore } from "../domain/store";
-import { CompanyAccounts, CompanyOutlook, CompanyRecurring } from "../ui/CompanyOps";
+import { CompanyAccounts, CompanyOutlook, CompanyRecentMoves, CompanyRecurring } from "../ui/CompanyOps";
 import { Money } from "../ui/Money";
 import { MoveForm } from "../ui/MoveForm";
 import { PageHeader, Section, Stat, TotalRow } from "../ui/Page";
@@ -18,6 +20,9 @@ export function Cw() {
   const cats = cwByCategory(state);
   const july = cwJulyUnclassified(state);
   const costs = cwCosts(state);
+  const bai2 = liquidityOf(state, "cw-bai2");
+  const owner = ownerCurrent(state);
+  const valorBai2Pds = bai2 + owner;
 
   return (
     <div className="page">
@@ -32,6 +37,33 @@ export function Cw() {
         entity="cw"
         extra={<Stat label="Faturação julho (por classificar)" n={july} mark="soft" />}
       />
+
+      <Section
+        title="BAI 2 — reconciliação"
+        mark={meta.tone}
+        hint="Conta da PDS. O que falta face ao valor PDS está na conta corrente (deves à empresa)."
+      >
+        <ul>
+          <li className="ledger-row">
+            <span className="text-ink/65">Na conta (PDS)</span>
+            <Money n={bai2} />
+          </li>
+          <li className="ledger-row">
+            <span className="text-ink/65">Conta corrente (deves à PDS)</span>
+            <Money n={owner} tone="out" />
+          </li>
+        </ul>
+        <TotalRow label="Valor PDS no BAI 2" mark={meta.tone}>
+          <Money n={valorBai2Pds} />
+        </TotalRow>
+        <p className="mt-4 text-xs leading-relaxed text-ink/45">
+          Na conta: <Money n={bai2} tone="mute" />. Os{" "}
+          <Money n={owner} tone="mute" /> em falta no valor PDS estão na conta corrente — dívida tua à
+          empresa, não dinheiro desaparecido. Não há fatia pessoal nesta conta.
+        </p>
+      </Section>
+
+      <CompanyRecentMoves entity="cw" />
 
       <Section
         title="De onde vem a receita"

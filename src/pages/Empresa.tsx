@@ -1,6 +1,6 @@
 import { ENTITY } from "../domain/labels";
 import type { EntityId } from "../domain/types";
-import { CompanyAccounts, CompanyOutlook, CompanyRecurring } from "../ui/CompanyOps";
+import { CompanyAccounts, CompanyOutlook, CompanyRecentMoves, CompanyRecurring } from "../ui/CompanyOps";
 import { MoveForm } from "../ui/MoveForm";
 import { PageHeader } from "../ui/Page";
 
@@ -17,6 +17,7 @@ export function Empresa({ entity }: { entity: Extract<EntityId, "picasso" | "ph"
       </div>
 
       <CompanyOutlook entity={entity} />
+      <CompanyRecentMoves entity={entity} />
       <CompanyRecurring entity={entity} />
       <CompanyAccounts entity={entity} />
     </div>

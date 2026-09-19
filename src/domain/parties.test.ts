@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyPartyCollection,
   applyPartyPayment,
+  custodyInAccount,
   liquidityOf,
+  ownLiquidityOf,
   ownerCurrent,
   partyOf,
 } from "./engine";
@@ -73,7 +75,7 @@ describe("Passo 5 — parties / dívidas", () => {
     const s = seedState();
     const p = s.parties.find((x) => x.role === "owner_current");
     expect(p?.id).toBe("emanuel-cw");
-    expect(ownerCurrent(s)).toBe(0);
+    expect(ownerCurrent(s)).toBe(89_200);
   });
 
   it("pagamento rejeitado em party a receber (usar cobrança)", () => {
@@ -84,5 +86,42 @@ describe("Passo 5 — parties / dívidas", () => {
       amount: 1000,
     });
     expect(r.ok).toBe(false);
+  });
+
+  it("ownLiquidityOf = saldo − custódia marcada nessa conta", () => {
+    const s = seedState();
+    expect(custodyInAccount(s, "atlantico")).toBe(437600 + 43316);
+    expect(ownLiquidityOf(s, "atlantico")).toBe(0);
+    expect(ownLiquidityOf(s, "bai")).toBe(liquidityOf(s, "bai"));
+  });
+
+  it("devolver custódia mantém o «teu» na conta", () => {
+    let s = seedState();
+    s = {
+      ...s,
+      accounts: s.accounts.map((a) =>
+        a.id === "atlantico" ? { ...a, opening: 500_000 } : a,
+      ),
+      parties: s.parties.map((p) =>
+        p.id === "lenu"
+          ? { ...p, opening: 100_000, heldInAccountId: "atlantico" }
+          : p.id === "eduardo-gta"
+            ? { ...p, opening: 50_000, heldInAccountId: "atlantico" }
+            : p,
+      ),
+    };
+    const teuAntes = ownLiquidityOf(s, "atlantico");
+    expect(teuAntes).toBe(350_000);
+    const r = applyPartyPayment(s, {
+      partyId: "lenu",
+      accountId: "atlantico",
+      amount: 40_000,
+      id: "dev-lenu",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(ownLiquidityOf(r.state, "atlantico")).toBe(teuAntes);
+    expect(liquidityOf(r.state, "atlantico")).toBe(460_000);
+    expect(custodyInAccount(r.state, "atlantico")).toBe(110_000);
   });
 });

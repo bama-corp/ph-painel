@@ -6,7 +6,7 @@ export const COMPANIES: Exclude<EntityId, "pessoal">[] = ["cw", "rove", "picasso
 export type OwnershipClass = "own" | "custody" | "company";
 
 /** Versão actual do schema persistido. */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 13;
 
 export type MovementKind =
   | "receita"
@@ -52,6 +52,11 @@ export type Party = {
   linkedEntityId?: EntityId;
   /** Conta corrente do proprietário na empresa */
   role?: "owner_current";
+  /**
+   * Conta de liquidez onde este dinheiro (custódia) está fisicamente.
+   * Só relevante para ownership=custody — permite mostrar «teu» vs «custódia» por conta.
+   */
+  heldInAccountId?: string;
 };
 
 export type Asset = {
@@ -195,6 +200,8 @@ export type AppState = {
   budgetLines: BudgetLine[];
   declared: Declared;
   notes: NotebookEntry[];
+  /** Parties que o utilizador removeu — a migrate não as ressuscita a partir do seed. */
+  removedPartyIds: string[];
 };
 
 export type AlertTone = "warn" | "bad" | "info";

@@ -162,7 +162,7 @@ describe("ADVERSARIAL — buracos fechados", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(partyOf(r.state, "emanuel-cw")).toBe(10_000);
+    expect(partyOf(r.state, "emanuel-cw")).toBe(99_200);
     expect(netWorth(r.state)).toBeCloseTo(nw0, 2);
   });
 

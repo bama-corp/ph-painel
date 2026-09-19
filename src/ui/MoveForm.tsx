@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { CW_CATS, KIND_LABEL } from "../domain/engine";
 import { entitySelectOptions, entityShort } from "../domain/labels";
+import { todayIso } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { CostNature, CwCategory, EntityId, MovementKind } from "../domain/types";
+import { DateField } from "./DateField";
 import { Select } from "./Select";
 
 const ENTITY_OPTIONS = entitySelectOptions("full");
@@ -39,7 +41,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
   const [entityId, setEntityId] = useState<EntityId>(defaultEntity ?? "pessoal");
   const [kind, setKind] = useState<MovementKind>("despesa");
   const [amount, setAmount] = useState("");
-  const [at, setAt] = useState(state.asOf);
+  const [at, setAt] = useState(todayIso);
   const [fromId, setFromId] = useState(state.accounts.find((a) => a.entityId === entityId)?.id ?? "");
   const [toId, setToId] = useState("");
   const [category, setCategory] = useState<CwCategory>("por_classificar");
@@ -220,12 +222,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         </label>
         <label className="field-label">
           Data
-          <input
-            type="date"
-            className="field text-sm font-normal normal-case tracking-normal text-ink"
-            value={at}
-            onChange={(e) => setAt(e.target.value)}
-          />
+          <DateField value={at} onChange={setAt} />
         </label>
         <label className="field-label">
           Valor (Kz)

@@ -1,15 +1,17 @@
 import type { AppState } from "./types";
 import { SCHEMA_VERSION } from "./types";
+import { todayIso } from "./money";
 
 /**
- * Snapshot de 19 ago 2026 (resumo_financeiro_atual).
- * Empresas: PDS, Plural, Picasso's, PH (36.500 — linha BAMA no resumo).
+ * Snapshot actualizado 19 set 2026.
+ * BAI 2 é só PDS (10.711,38 na conta + 89.200 conta corrente do dono).
+ * Não há fatia pessoal no BAI 2.
  * Lenu e Eduardo (GTA) são custody (terceiros) dentro da liquidez pessoal bruta.
  */
 export function seedState(): AppState {
   return {
     schemaVersion: SCHEMA_VERSION,
-    asOf: "2026-08-19",
+    asOf: todayIso(),
     month: "2026-08",
     rules: {
       obrigacoes: 30,
@@ -22,12 +24,12 @@ export function seedState(): AppState {
     accounts: [
       { id: "bai", entityId: "pessoal", name: "BAI", kind: "banco", opening: 111303.02 },
       { id: "bfa", entityId: "pessoal", name: "BFA", kind: "banco", opening: 10107.06 },
-      { id: "atlantico", entityId: "pessoal", name: "ATLANTICO — teu", kind: "banco", opening: 59500 },
+      { id: "atlantico", entityId: "pessoal", name: "ATLANTICO", kind: "banco", opening: 59500 },
       { id: "stand", entityId: "pessoal", name: "STAND", kind: "stand", opening: 1000000 },
       { id: "caixa-p", entityId: "pessoal", name: "Caixa", kind: "caixa", opening: 1800 },
       { id: "cofre", entityId: "pessoal", name: "Cofre", kind: "cofre", opening: 0 },
-      { id: "cw-caixa", entityId: "cw", name: "Caixa PDS", kind: "caixa", opening: 12310 },
-      { id: "cw-bai2", entityId: "cw", name: "BAI 2", kind: "banco", opening: 57250 },
+      { id: "cw-caixa", entityId: "cw", name: "Caixa PDS", kind: "caixa", opening: 29060 },
+      { id: "cw-bai2", entityId: "cw", name: "BAI 2", kind: "banco", opening: 10711.38 },
       { id: "rove-caixa", entityId: "rove", name: "Caixa Plural", kind: "caixa", opening: 72508.78 },
       { id: "picasso-caixa", entityId: "picasso", name: "Caixa Picasso's", kind: "caixa", opening: 21500 },
       { id: "ph-caixa", entityId: "ph", name: "Caixa PH", kind: "caixa", opening: 36500 },
@@ -46,8 +48,15 @@ export function seedState(): AppState {
       { id: "nuno", entityId: "pessoal", name: "Nuno", side: "receber", opening: 8000, ownership: "own" },
       { id: "daniela", entityId: "pessoal", name: "Daniela", side: "receber", opening: 8000, ownership: "own" },
       { id: "tuni-pag", entityId: "pessoal", name: "Tuni", side: "pagar", opening: 60000, ownership: "own" },
-      { id: "meneza", entityId: "pessoal", name: "Meneza (pago)", side: "pagar", opening: 0, ownership: "own" },
-      { id: "lenu", entityId: "pessoal", name: "Lenu (terceiros)", side: "pagar", opening: 437600, ownership: "custody" },
+      {
+        id: "lenu",
+        entityId: "pessoal",
+        name: "Lenu (terceiros)",
+        side: "pagar",
+        opening: 437600,
+        ownership: "custody",
+        heldInAccountId: "atlantico",
+      },
       {
         id: "eduardo-gta",
         entityId: "pessoal",
@@ -55,13 +64,14 @@ export function seedState(): AppState {
         side: "pagar",
         opening: 43316,
         ownership: "custody",
+        heldInAccountId: "atlantico",
       },
       {
         id: "emanuel-cw",
         entityId: "cw",
         name: "Emanuel — conta corrente",
         side: "receber",
-        opening: 0,
+        opening: 89200,
         ownership: "company",
         linkedEntityId: "pessoal",
         role: "owner_current",
@@ -133,5 +143,6 @@ export function seedState(): AppState {
       salary: 220000,
     },
     notes: [],
+    removedPartyIds: [],
   };
 }

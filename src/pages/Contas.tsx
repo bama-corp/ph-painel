@@ -2,11 +2,14 @@ import { useState, type FormEvent } from "react";
 import {
   canEditAccountOpening,
   canEditPartyOpening,
+  custodyInAccount,
   custodyLiquidity,
   liquidityByEntity,
   liquidityOf,
+  ownLiquidityOf,
   partiesSum,
   partyOf,
+  personalOwnLiquidity,
 } from "../domain/engine";
 import { useStore } from "../domain/store";
 import type { OwnershipClass, Party } from "../domain/types";
@@ -24,69 +27,118 @@ const OWN_LABEL: Record<OwnershipClass, string> = {
 export function Contas() {
   const { state, setParty, setAccountOpening, payParty, collectParty, addParty, removeParty } = useStore();
   const receber = state.parties.filter((p) => p.entityId === "pessoal" && p.side === "receber");
-  const pagar = state.parties.filter((p) => p.entityId === "pessoal" && p.side === "pagar");
+  const dividaPropria = state.parties.filter(
+    (p) => p.entityId === "pessoal" && p.side === "pagar" && p.ownership !== "custody",
+  );
+  const custodiaParties = state.parties.filter(
+    (p) => p.entityId === "pessoal" && p.side === "pagar" && p.ownership === "custody",
+  );
   const liq = liquidityByEntity(state, "pessoal");
+  const teuTotal = personalOwnLiquidity(state);
   const sumReceber = partiesSum(state, "pessoal", "receber");
   const sumPagarOwn = partiesSum(state, "pessoal", "pagar", "own");
   const custodia = custodyLiquidity(state);
   const personalAccounts = state.accounts.filter((a) => a.entityId === "pessoal");
   const [accountId, setAccountId] = useState(personalAccounts[0]?.id ?? "bai");
+  const cashNaConta = liquidityOf(state, accountId);
+  const teuNaConta = ownLiquidityOf(state, accountId);
+  const custodiaNaConta = custodyInAccount(state, accountId);
 
   return (
     <div className="page">
       <PageHeader title="Contas pessoais" mark="pine">
-        Saldo vivo = opening + movimentos. Podes adicionar quem te deve e a quem deves. Custódia
-        (terceiros) não entra no orçamento.
+        O saldo do banco mistura o teu dinheiro com custódia. Em cada conta vês separado: total ·
+        custódia · teu. Devolver custódia só reduz a fatia de terceiros — o «teu» mantém-se.
       </PageHeader>
       <div className="mt-8">
         <MoveForm defaultEntity="pessoal" />
       </div>
 
-      <Section title="Liquidez" mark="pine" hint={`Custódia embutida nos bancos: ${custodia.toLocaleString("pt-PT")} Kz.`}>
+      <Section
+        title="Liquidez"
+        mark="pine"
+        hint={`Bruto ${liq.toLocaleString("pt-PT")} Kz · custódia ${custodia.toLocaleString("pt-PT")} Kz (não é teu).`}
+      >
+        <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)] gap-x-3 text-[0.62rem] font-medium uppercase tracking-[0.12em] text-ink/30">
+          <span>Conta</span>
+          <span className="text-right">Total</span>
+          <span className="text-right">Custódia</span>
+          <span className="text-right">Teu</span>
+        </div>
         <ul>
           {personalAccounts.map((a) => {
             const editable = canEditAccountOpening(state, a.id);
+            const total = liquidityOf(state, a.id);
+            const cust = custodyInAccount(state, a.id);
+            const own = ownLiquidityOf(state, a.id);
+            const over = cust > total + 0.001;
             return (
-              <li
-                key={a.id}
-                className="grid grid-cols-[minmax(0,1.4fr)_9.5rem_minmax(7.5rem,1fr)] items-baseline gap-x-6 border-b border-ink/[0.07] py-2.5"
-              >
-                <span className="truncate text-sm text-ink/70">{a.name}</span>
-                <label className="flex min-w-0 items-baseline gap-2">
-                  <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/30">
-                    opening
+              <li key={a.id} className="border-b border-ink/[0.07] py-2.5">
+                <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)] items-baseline gap-x-3">
+                  <span className="truncate text-sm text-ink/70">{a.name}</span>
+                  <span className="text-right">
+                    <Money n={total} />
                   </span>
-                  <input
-                    className="field num m-0 min-w-0 flex-1 py-1 text-right text-sm disabled:opacity-40"
-                    defaultValue={a.opening}
-                    disabled={!editable}
-                    title={editable ? "Opening editável" : "Bloqueado — usa ajuste auditado"}
-                    onBlur={(e) =>
-                      setAccountOpening(a.id, Number(String(e.target.value).replace(",", ".")) || 0)
-                    }
-                  />
-                </label>
-                <span className="text-right">
-                  <Money n={liquidityOf(state, a.id)} />
-                </span>
+                  <span className="text-right">
+                    <Money n={cust} tone="mute" />
+                  </span>
+                  <span className="text-right">
+                    <Money n={own} tone={own > 0 ? "plain" : "mute"} />
+                  </span>
+                </div>
+                {editable ? (
+                  <label className="mt-1.5 flex max-w-xs items-baseline gap-2">
+                    <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/30">
+                      opening
+                    </span>
+                    <input
+                      className="field num m-0 min-w-0 flex-1 py-1 text-right text-sm"
+                      defaultValue={a.opening}
+                      onBlur={(e) =>
+                        setAccountOpening(a.id, Number(String(e.target.value).replace(",", ".")) || 0)
+                      }
+                    />
+                  </label>
+                ) : null}
+                {over ? (
+                  <p className="mt-1 text-[0.7rem] text-rust">
+                    Custódia atribuída a esta conta &gt; saldo — diz onde está cada um em baixo.
+                  </p>
+                ) : null}
               </li>
             );
           })}
         </ul>
-        <TotalRow label="Total" mark="pine">
-          <Money n={liq} />
+        <TotalRow label="Teu (próprio)" mark="pine">
+          <Money n={teuTotal} />
         </TotalRow>
+        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/45">
+          <span>
+            Custódia: <Money n={custodia} tone="mute" />
+          </span>
+          <span>
+            Bruto nos bancos: <Money n={liq} tone="mute" />
+          </span>
+        </p>
       </Section>
 
-      <div className="mt-8 max-w-xs">
+      <div className="mt-8 max-w-sm">
         <label className="field-label">
-          Conta para pagar / receber
+          Conta de caixa (pagar / receber)
           <Select
             value={accountId}
             onChange={setAccountId}
-            options={personalAccounts.map((a) => ({ value: a.id, label: a.name }))}
+            options={personalAccounts.map((a) => ({
+              value: a.id,
+              label: `${a.name} · teu ${ownLiquidityOf(state, a.id).toLocaleString("pt-PT")}`,
+            }))}
           />
         </label>
+        <p className="mt-2 text-xs leading-relaxed text-ink/45">
+          Nesta conta: total <Money n={cashNaConta} tone="mute" /> · custódia{" "}
+          <Money n={custodiaNaConta} tone="mute" /> · teu <Money n={teuNaConta} tone="mute" />.
+          Dívida própria sai do «teu». Custódia devolve-se na conta onde está marcada.
+        </p>
       </div>
 
       <div className="mt-14 grid gap-14 md:grid-cols-2 md:items-stretch md:gap-16">
@@ -96,10 +148,7 @@ export function Contas() {
             <h2 className="section-title">A receber</h2>
             <span className="sep-line ml-2 hidden flex-1 sm:block" />
           </div>
-          <AddPartyForm
-            side="receber"
-            onAdd={(draft) => addParty(draft)}
-          />
+          <AddPartyForm side="receber" onAdd={(draft) => addParty(draft)} />
           <ul className="mt-4 flex-1 space-y-0">
             {receber.map((p) => (
               <PartyRow
@@ -121,16 +170,15 @@ export function Contas() {
         <div className="flex flex-col">
           <div className="section-head">
             <Mark tone="rust" />
-            <h2 className="section-title">A pagar</h2>
+            <h2 className="section-title">Dívida própria</h2>
             <span className="sep-line ml-2 hidden flex-1 sm:block" />
           </div>
-          <AddPartyForm
-            side="pagar"
-            onAdd={(draft) => addParty(draft)}
-            allowCustody
-          />
+          <p className="mt-2 text-xs leading-relaxed text-ink/45">
+            O que <em>tu</em> deves. Sai do «teu» da conta seleccionada.
+          </p>
+          <AddPartyForm side="pagar" onAdd={(draft) => addParty(draft)} />
           <ul className="mt-4 flex-1 space-y-0">
-            {pagar.map((p) => (
+            {dividaPropria.map((p) => (
               <PartyRow
                 key={p.id}
                 party={p}
@@ -143,14 +191,61 @@ export function Contas() {
               />
             ))}
           </ul>
-          <TotalRow label="Dívida própria" mark="rust" className="mt-auto">
+          <TotalRow label="Total dívida própria" mark="rust" className="mt-auto">
             <Money n={sumPagarOwn} tone="out" />
           </TotalRow>
-          <p className="mt-2 text-xs text-ink/45">
-            Custódia (terceiros): <Money n={custodia} tone="mute" />
-          </p>
         </div>
       </div>
+
+      <Section
+        title="Custódia (terceiros)"
+        mark="soft"
+        className="mt-14"
+        hint="Marca em que conta está o dinheiro deles. «Devolver» sai dessa conta e o teu saldo próprio nessa conta não muda."
+      >
+        <AddPartyForm
+          side="pagar"
+          accounts={personalAccounts.map((a) => ({ id: a.id, name: a.name }))}
+          onAdd={(draft) => addParty({ ...draft, ownership: "custody" })}
+          forceCustody
+        />
+        <ul className="mt-4 space-y-0">
+          {custodiaParties.map((p) => {
+            const held = p.heldInAccountId ?? accountId;
+            return (
+              <PartyRow
+                key={p.id}
+                party={p}
+                value={partyOf(state, p.id)}
+                canEditOpening={canEditPartyOpening(state, p.id)}
+                onSetOpening={(n) => setParty(p.id, { opening: n, unknown: n === 0 ? p.unknown : false })}
+                onAction={(amount) =>
+                  payParty({
+                    partyId: p.id,
+                    accountId: held,
+                    amount,
+                  })
+                }
+                actionLabel="Devolver"
+                actionHint={
+                  p.heldInAccountId
+                    ? `Sai de «${personalAccounts.find((a) => a.id === p.heldInAccountId)?.name ?? p.heldInAccountId}». O «teu» nessa conta mantém-se.`
+                    : "Escolhe primeiro a conta onde está este dinheiro."
+                }
+                accounts={personalAccounts.map((a) => ({ id: a.id, name: a.name }))}
+                onSetHeldAccount={(id) => setParty(p.id, { heldInAccountId: id || undefined })}
+                onRemove={() => removeParty(p.id)}
+              />
+            );
+          })}
+        </ul>
+        {custodiaParties.length === 0 ? (
+          <p className="mt-4 text-sm text-ink/40">Sem custódia registada.</p>
+        ) : null}
+        <TotalRow label="Total custódia" mark="soft" className="mt-6">
+          <Money n={custodia} tone="mute" />
+        </TotalRow>
+      </Section>
     </div>
   );
 }
@@ -159,14 +254,19 @@ function AddPartyForm({
   side,
   onAdd,
   allowCustody = false,
+  forceCustody = false,
+  accounts = [],
 }: {
   side: "receber" | "pagar";
   onAdd: (p: Omit<Party, "id">) => { ok: boolean; reason?: string };
   allowCustody?: boolean;
+  forceCustody?: boolean;
+  accounts?: { id: string; name: string }[];
 }) {
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
-  const [ownership, setOwnership] = useState<OwnershipClass>("own");
+  const [ownership, setOwnership] = useState<OwnershipClass>(forceCustody ? "custody" : "own");
+  const [heldInAccountId, setHeldInAccountId] = useState(accounts[0]?.id ?? "");
   const [err, setErr] = useState("");
 
   function submit(e: FormEvent) {
@@ -177,8 +277,9 @@ function AddPartyForm({
       name,
       side,
       opening,
-      ownership: allowCustody ? ownership : "own",
+      ownership: forceCustody ? "custody" : allowCustody ? ownership : "own",
       unknown: opening === 0,
+      heldInAccountId: forceCustody && heldInAccountId ? heldInAccountId : undefined,
     });
     if (!r.ok) {
       setErr(r.reason ?? "Não foi possível adicionar.");
@@ -186,14 +287,18 @@ function AddPartyForm({
     }
     setName("");
     setAmount("");
-    setOwnership("own");
+    setOwnership(forceCustody ? "custody" : "own");
     setErr("");
   }
 
   return (
     <form onSubmit={submit} className="mt-5 space-y-3 border border-ink/10 bg-wash/40 p-3">
       <p className="text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/40">
-        {side === "receber" ? "Nova pessoa que te deve" : "Nova dívida / terceiros"}
+        {forceCustody
+          ? "Nova custódia (terceiros)"
+          : side === "receber"
+            ? "Nova pessoa que te deve"
+            : "Nova dívida própria"}
       </p>
       <label className="field-label m-0">
         Nome
@@ -201,11 +306,11 @@ function AddPartyForm({
           className="field m-0 text-sm font-normal normal-case tracking-normal text-ink"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={side === "receber" ? "ex. João" : "ex. Tuni / Lenu"}
+          placeholder={forceCustody ? "ex. Lenu" : side === "receber" ? "ex. João" : "ex. Tuni"}
           required
         />
       </label>
-      <div className={`grid gap-3 ${allowCustody ? "grid-cols-2" : ""}`}>
+      <div className={`grid gap-3 ${allowCustody && !forceCustody ? "grid-cols-2" : forceCustody ? "grid-cols-2" : ""}`}>
         <label className="field-label m-0">
           Valor (Kz)
           <input
@@ -216,7 +321,17 @@ function AddPartyForm({
             placeholder="0"
           />
         </label>
-        {allowCustody ? (
+        {forceCustody && accounts.length ? (
+          <label className="field-label m-0">
+            Está em
+            <Select
+              value={heldInAccountId}
+              onChange={setHeldInAccountId}
+              options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+            />
+          </label>
+        ) : null}
+        {allowCustody && !forceCustody ? (
           <label className="field-label m-0">
             Tipo
             <Select
@@ -245,6 +360,9 @@ function PartyRow({
   onSetOpening,
   onAction,
   actionLabel,
+  actionHint,
+  accounts,
+  onSetHeldAccount,
   onRemove,
 }: {
   party: Party;
@@ -253,6 +371,9 @@ function PartyRow({
   onSetOpening: (n: number) => void;
   onAction: (amount: number) => { ok: boolean; reason?: string };
   actionLabel: string;
+  actionHint?: string;
+  accounts?: { id: string; name: string }[];
+  onSetHeldAccount?: (accountId: string) => void;
   onRemove: () => { ok: boolean; reason?: string };
 }) {
   const [payRaw, setPayRaw] = useState("");
@@ -262,6 +383,10 @@ function PartyRow({
     const n = Number(String(payRaw).replace(",", "."));
     if (!n || n <= 0) {
       setErr("Valor inválido.");
+      return;
+    }
+    if (party.ownership === "custody" && !party.heldInAccountId) {
+      setErr("Indica em que conta está este dinheiro.");
       return;
     }
     const r = onAction(n);
@@ -307,18 +432,35 @@ function PartyRow({
           ) : null}
         </div>
       </div>
-      {value > 0 ? (
-        <div className="mt-2 flex flex-wrap items-end gap-2">
-          <input
-            className="field num m-0 w-28 py-1 text-sm"
-            inputMode="decimal"
-            placeholder="Valor"
-            value={payRaw}
-            onChange={(e) => setPayRaw(e.target.value)}
+      {onSetHeldAccount && accounts?.length ? (
+        <label className="mt-2 block max-w-xs field-label">
+          Está em
+          <Select
+            value={party.heldInAccountId ?? ""}
+            onChange={onSetHeldAccount}
+            placeholder="Escolher conta…"
+            options={[
+              { value: "", label: "—" },
+              ...accounts.map((a) => ({ value: a.id, label: a.name })),
+            ]}
           />
-          <button type="button" className="btn-ghost py-1 text-sm" onClick={runPay}>
-            {actionLabel}
-          </button>
+        </label>
+      ) : null}
+      {value > 0 ? (
+        <div className="mt-2">
+          {actionHint ? <p className="mb-1.5 text-[0.7rem] text-ink/40">{actionHint}</p> : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <input
+              className="field num m-0 w-28 py-1 text-sm"
+              inputMode="decimal"
+              placeholder="Valor"
+              value={payRaw}
+              onChange={(e) => setPayRaw(e.target.value)}
+            />
+            <button type="button" className="btn-ghost py-1 text-sm" onClick={runPay}>
+              {actionLabel}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-2">
