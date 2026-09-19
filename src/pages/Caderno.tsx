@@ -34,11 +34,11 @@ function CompactTerms({ terms }: { terms: { t: string; d: string }[] }) {
   return (
     <ul>
       {terms.map((r) => (
-        <li key={r.t} className="ledger-row !items-start flex-col gap-1 py-3 sm:flex-row sm:gap-6">
-          <p className="shrink-0 font-display text-[0.95rem] font-semibold leading-snug tracking-tight sm:w-44">
+        <li key={r.t} className="ledger-row !items-start flex-col gap-1.5 py-3.5 sm:flex-row sm:gap-6">
+          <p className="shrink-0 font-display text-[0.95rem] font-semibold leading-snug tracking-tight sm:w-48">
             {r.t}
           </p>
-          <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink/60">{r.d}</p>
+          <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-ink/60">{r.d}</p>
         </li>
       ))}
     </ul>

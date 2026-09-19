@@ -42,27 +42,27 @@ export const REGRAS: ManualTerm[] = [
 export const DISTINCOES: ManualTerm[] = [
   {
     t: "Bruto ≠ próprio ≠ alocável ≠ gastável ≠ património",
-    d: "Estar no banco não autoriza gastar. Só o que está nos bolsos operacional + lazer é gastável no dia a dia.",
+    d: "Bruto = o que está nos bancos (pode incluir custódia). Próprio = bruto − custódia. Alocável = próprio ainda sem bolso. Gastável = só operacional + lazer. Património = visão longa (bens, empresas, dívidas). Ter dinheiro no banco não autoriza gastar.",
   },
   {
     t: "Receita ≠ Meter",
-    d: "Receita só credita liquidez. Meter / Distribuir é que mete o dinheiro num bolso.",
+    d: "Receita só credita liquidez na conta. Meter / «Distribuir esta entrada» é que mete o dinheiro num bolso. Sem Meter, o dinheiro fica alocável e os bolsos não sobem.",
   },
   {
     t: "Custódia ≠ dívida tua",
-    d: "Custódia é dinheiro de terceiros nas tuas contas. Devolver não é pagar uma dívida própria com o teu saldo.",
+    d: "Custódia é dinheiro de terceiros (Lenu, Eduardo…) que está nas tuas contas. Conta no bruto, mas não é teu nem gastável. Devolver sai da conta marcada; não mistures com pagar Tuni ou tirar da PDS.",
   },
   {
     t: "Caixa da empresa ≠ bolso",
-    d: "A caixa da empresa entra no património como participação. Não é dinheiro para gastar no pessoal.",
+    d: "A caixa da PDS/Plural/Picasso's/PH entra no património como participação. Não é bolso pessoal. Para tirar dinheiro usa o tipo certo: pró-labore, empréstimo, distribuição, reembolso ou investimento.",
   },
   {
     t: "Planeado ≠ registado",
-    d: "Fontes de renda, custos recorrentes e receita declarada são plano. Só o Registo move o ledger.",
+    d: "Fontes de renda, custos recorrentes e receita declarada são plano (orçamento / empresas). Só o Registo (ledger) move caixa. Lucro esperado usa o planeado; lucro registado usa só movimentos.",
   },
   {
     t: "Empréstimo ≠ pró-labore ≠ distribuição ≠ reembolso",
-    d: "Cada saída da empresa para ti tem um tipo. Errar o tipo mentirá a conta corrente e o equity.",
+    d: "Empréstimo: empresa → ti e sobe a conta corrente (deves à empresa). Pró-labore: remuneração do dono (não sobe C/C como dívida de empréstimo). Distribuição: parte do lucro. Reembolso: tu → empresa a pagar o que devias. Errar o tipo mente equity e C/C.",
   },
 ];
 
@@ -214,7 +214,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Custódia (na conta)",
-        d: "Dinheiro de terceiros que está fisicamente nessa conta. Não é teu nem gastável.",
+        d: "Dinheiro de terceiros fisicamente nessa conta (ex. Lenu no ATLANTICO). Está no total/bruto, mas o «teu» = total − custódia. Nunca Meter custódia para bolsos. Para libertar: Devolver / pagamento à party de custódia.",
       },
       {
         t: "Total (por conta)",
@@ -222,7 +222,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Alocável",
-        d: "Capital pessoal próprio ainda sem bolso (= liquidez própria − o que já está nos bolsos).",
+        d: "Capital pessoal próprio ainda sem bolso (= liquidez própria − o que já está nos bolsos). É o que podes Meter ou Distribuir. Se alocável sobe e não ages, o Orçamento fica desactualizado face ao banco.",
       },
       {
         t: "Nos bolsos",
@@ -230,7 +230,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Gastável",
-        d: "Só o que está nos bolsos operacional + lazer. Reserva e investimento não entram.",
+        d: "Só o que está nos bolsos operacional + lazer. Reserva e investimento não entram no dia a dia — mesmo que o banco tenha saldo.",
       },
       {
         t: "Investível / Reservado",
@@ -238,11 +238,11 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Disponível ≠ gastável",
-        d: "Ter dinheiro no banco ou património não autoriza gastar.",
+        d: "Ter dinheiro no banco ou património não autoriza gastar. Gastável = bolsos certos com saldo.",
       },
       {
         t: "Caixa (empresa)",
-        d: "Liquidez total de uma empresa.",
+        d: "Liquidez total de uma empresa. Independente do teu bolso pessoal.",
       },
       {
         t: "Por classificar (conta)",
@@ -250,7 +250,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Ajuste auditado",
-        d: "Movimento que corrige o saldo vivo sem alterar o opening (mundo ↔ liquidez).",
+        d: "Movimento que corrige o saldo vivo sem alterar o opening (mundo ↔ liquidez). Usa quando o banco real ≠ painel e já há movimentos (opening bloqueado).",
       },
       {
         t: "Mundo",
@@ -265,7 +265,7 @@ export const GLOSSARIO: ManualSection[] = [
     terms: [
       {
         t: "Party",
-        d: "Pessoa ou relação com saldo a receber ou a pagar.",
+        d: "Pessoa ou relação com saldo a receber ou a pagar. Não é conta bancária.",
       },
       {
         t: "A receber",
@@ -273,7 +273,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "A pagar / dívida própria",
-        d: "O que tu (ou a empresa) deves. Pagamento sai da liquidez e reduz a party.",
+        d: "O que tu (ou a empresa) deves. Pagamento sai da liquidez e reduz a party. Diferente de custódia.",
       },
       {
         t: "Próprio (ownership)",
@@ -281,7 +281,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Custódia (ownership)",
-        d: "Dinheiro de terceiros nas tuas contas. Devolver ≠ pagar dívida própria.",
+        d: "Dinheiro de terceiros nas tuas contas. Ownership «custody». Devolver ≠ pagar dívida própria com o teu saldo gastável.",
       },
       {
         t: "Empresa (ownership)",
@@ -289,7 +289,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Conta corrente do proprietário",
-        d: "O que o dono deve à empresa (ex. PDS). Reembolso ≠ pró-labore.",
+        d: "O que o dono deve à empresa (ex. PDS). Sobe com empréstimo ao proprietário ou despesa pessoal pela empresa. Desce com reembolso. Reembolso ≠ pró-labore.",
       },
       {
         t: "Devolver",
@@ -305,7 +305,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Conta da custódia",
-        d: "Conta de liquidez onde o dinheiro do terceiro está fisicamente marcado.",
+        d: "Conta de liquidez onde o dinheiro do terceiro está fisicamente marcado (heldInAccount).",
       },
       {
         t: "Unknown",
@@ -320,7 +320,7 @@ export const GLOSSARIO: ManualSection[] = [
     terms: [
       {
         t: "Bolso / envelope",
-        d: "Função do dinheiro pessoal. Despesa pessoal exige bolso com saldo.",
+        d: "Função do dinheiro pessoal (operacional, reserva, investimento, lazer, projectos). Despesa pessoal exige bolso com saldo. Banco ≠ bolso.",
       },
       {
         t: "Operacional",
@@ -328,7 +328,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Reserva",
-        d: "Emergência — não se usa no quotidiano.",
+        d: "Emergência — não se usa no quotidiano. Intocável até crise real.",
       },
       {
         t: "Investimento (bolso)",
@@ -344,7 +344,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Meter",
-        d: "Meter Kz de alocável num bolso concreto.",
+        d: "Meter Kz de alocável num bolso concreto. É o passo depois da receita. Sem Meter, alocável acumula e os bolsos mentem.",
       },
       {
         t: "Alocação (bolso)",
@@ -352,7 +352,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Fontes de renda",
-        d: "Planeamento mensal (ex. Salário GSA). Não move dinheiro.",
+        d: "Planeamento mensal (ex. Salário GSA). Não move dinheiro — só define a base dos tectos das %.",
       },
       {
         t: "Renda planeada",
@@ -360,7 +360,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Percentagens dos bolsos",
-        d: "Regras: obrigações, reserva, investimento, despesas, lazer (soma = 100%).",
+        d: "Regras: obrigações, reserva, investimento, despesas, lazer (soma = 100%). Vêm do método (50/30/20, Bolsos PH…) ou personalizado.",
       },
       {
         t: "Obrigações / Reserva / Investimento / Despesas / Lazer (%)",
@@ -368,7 +368,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Linha orçamentária",
-        d: "Inventário concreto (renda, luz…) dentro de uma %. Não move dinheiro.",
+        d: "Inventário concreto (renda, luz…) dentro de uma %. Não move dinheiro — mostra se o tecto chega.",
       },
       {
         t: "Tecto",
@@ -376,7 +376,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Distribuir esta entrada",
-        d: "Parte um valor de entrada (≤ alocável) pelas regras — não o stock inteiro.",
+        d: "Parte um valor de entrada (≤ alocável) pelas regras — não o stock inteiro. Ideal quando acaba de entrar salário/cobrança.",
       },
       {
         t: "Método de divisão",
@@ -388,7 +388,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Banco ≠ bolso",
-        d: "Contas = onde vive. Bolsos = função.",
+        d: "Contas = onde vive. Bolsos = função. Podes ter 100 mil no BAI e 0 gastável se nada estiver nos bolsos certos.",
       },
     ],
   },
@@ -423,47 +423,90 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Empréstimo ao proprietário",
-        d: "Empresa → pessoal. Sobe a conta corrente (deves à empresa).",
+        d: "Empresa → pessoal. A empresa empresta-te dinheiro: sobe a conta corrente (deves à empresa). Não é pró-labore. Quando devolveres, usa reembolso — não «investimento» nem despesa.",
       },
       {
         t: "Pró-labore",
-        d: "Retirada como remuneração do dono (empresa → pessoal).",
+        d: "Remuneração do dono: empresa → pessoal.\n\nÉ o teu «ordenado» pela empresa — não um empréstimo.\nEntra na liquidez pessoal; depois usa Meter / Distribuir nos bolsos.\nNo lucro do mês da empresa, conta como saída.",
+      },
+      {
+        t: "Como calcular um pró-labore",
+        d: "1. Olha a caixa e o lucro da empresa (PDS / Plural / …) — não tires o que a operação precisa.\n2. Define um valor mensal fixo ou % do lucro registado, sustentável sem esvaziar a caixa.\n3. No Registo: movimento «pró-labore», da conta da empresa para a tua (BAI / caixa).\n4. No pessoal: Meter ou «Distribuir esta entrada» para os bolsos.\n5. Não uses pró-labore para devolver dinheiro à empresa (isso é reembolso) nem para custódia.\n\nRegra rápida:\n· Empresa te remunera → pró-labore\n· Tu deves à empresa → reembolso\n· Adiantamento a devolver → empréstimo",
       },
       {
         t: "Distribuição de lucro",
-        d: "Empresa → pessoal como distribuição de lucro.",
+        d: "Empresa → pessoal como partilha de lucro (depois de haver lucro real).\nDiferente de pró-labore (remuneração regular) e de empréstimo (cria dívida na C/C).",
       },
       {
         t: "Reembolso da conta corrente",
-        d: "Devolver o que deves à empresa (reduz C/C).",
+        d: "Tu → empresa: pagas o que devias (C/C desce).\nUsa quando tinhas feito empréstimo ao proprietário ou despesa pessoal pela empresa.\nNão é pró-labore.",
       },
       {
         t: "Despesa pessoal paga pela empresa",
-        d: "Empresa paga algo teu — aumenta o que deves à empresa.",
+        d: "Empresa paga algo teu — aumenta o que deves à empresa (C/C).\nMais tarde reembolsas.\nNão registes como despesa «normal» da empresa se for teu consumo.",
+      },
+      {
+        t: "Como tirar dinheiro da empresa",
+        d: "· Remuneração? → pró-labore\n· Adiantamento a devolver? → empréstimo ao proprietário\n· Partilha de lucro? → distribuição\n· Pagar o que devias? → reembolso (pessoal → empresa)\n\nNunca «despesa» sem nome nem transferência solta entre caixas.",
       },
       {
         t: "Pagamento a party",
-        d: "Liquidez → party a pagar (atómico).",
+        d: "Liquidez → party a pagar (atómico).\nPara dívida própria (Tuni) ou libertar custódia (Lenu) com Devolver.",
       },
       {
         t: "Cobrança de party",
-        d: "Party a receber → liquidez (atómico).",
+        d: "Party a receber → liquidez (atómico).\nEx.: cobraste Ferraz — sobe a conta e desce o a receber.",
       },
       {
         t: "De / Para",
-        d: "Extremos do movimento (conta, party, mundo…).",
+        d: "Extremos do movimento (conta, party, mundo…).\nO tipo + de/para definem se sobe C/C, bolsos, etc.",
       },
       {
         t: "Serviço (PDS)",
-        d: "Categoria da receita: jogos, impressões, cópias, trabalhos, manutenção, outros, por classificar.",
+        d: "Categoria da receita PADStation: jogos, impressões, cópias, trabalhos, manutenção, outros, por classificar.",
       },
       {
         t: "Natureza (custo)",
-        d: "Fixo / variável / investimento / retirada — classificação de custos.",
+        d: "Fixo / variável / investimento / retirada — classificação de custos da empresa.",
       },
       {
         t: "Ledger",
-        d: "Livro de movimentos persistido. O Assistente grava aqui depois de confirmares.",
+        d: "Livro de movimentos persistido.\nO Assistente só grava depois de confirmares.",
+      },
+    ],
+  },
+  {
+    id: "como",
+    title: "Como fazer",
+    hint: "Passos práticos — o Assistente também responde a «como calcular…».",
+    terms: [
+      {
+        t: "Como calcular lucro",
+        d: "No painel há dois lucros — não mistures:\n\n· Lucro registado = receitas do mês − (despesas + pró-labore) já no ledger.\n· Lucro esperado = receita − o maior entre despesas registadas e custos planeados (mostra o que ainda falta registar).\n\nPassos:\n1. Abre a empresa (PDS / Plural / Picasso's / PH).\n2. Confirma que as receitas do mês estão no Registo (com serviço/categoria se for PDS).\n3. Regista despesas e pró-labore do mês — senão o lucro registado fica inflacionado.\n4. Compara com custos recorrentes: se o planeado > registado, há «por registar».\n5. Lucro ≠ caixa livre: ainda precisas de liquidez para operar; tirar dinheiro é pró-labore / distribuição / empréstimo — nunca «despesa» solta.\n\nAtalho: pergunta no Assistente «lucro registado» ou «lucro esperado».",
+      },
+      {
+        t: "Como fazer lucro",
+        d: "Lucro no painel = resultado dos movimentos, não um botão.\n\n1. Aumenta receita real (regista quando o dinheiro entra — na Plural, cliente ≠ pagamento).\n2. Controla custos: planeados vs registados; corta o que não precisa.\n3. Não tires pró-labore acima do que a caixa aguenta.\n4. Vê lucro registado vs esperado na página da empresa.\n5. No Eu, o fluxo do mês mostra o que realmente moveu.\n\nVer também: «Como calcular lucro».",
+      },
+      {
+        t: "Como registar uma receita pessoal",
+        d: "1. Registo → receita, conta (BAI/caixa), valor.\n2. Orçamento → Meter ou «Distribuir esta entrada» pelas %.\n3. Confirma no Eu: alocável baixou e os bolsos subiram.\n\nCustódia e dinheiro de empresa não entram aqui.",
+      },
+      {
+        t: "Como Meter / distribuir",
+        d: "1. Se alocável > 0, abre Orçamento.\n2. Meter: valor num bolso concreto.\n3. Ou «Distribuir esta entrada»: parte um valor pelas regras (não o stock inteiro).\n4. Projectos só por Meter manual.\n\nSem isto, o gastável não reflecte a realidade.",
+      },
+      {
+        t: "Como devolver custódia",
+        d: "1. Contas → party de custódia (Lenu…).\n2. Devolver — sai da conta onde está (ex. ATLANTICO).\n3. O «teu» nessa conta mantém-se.\n\nOu no Assistente: «Devolvi 30000 do Lenu».",
+      },
+      {
+        t: "Como ler o Eu",
+        d: "1. De quem é o dinheiro (próprio vs custódia vs empresas).\n2. Alertas.\n3. Património ≠ gastável.\n4. Fluxo do mês = movimentos reais, não o salário declarado.",
+      },
+      {
+        t: "Como usar o Assistente",
+        d: "· Movimentos: frases com valor («Emprestei 2000kz na PDS»).\n· Saldos: «quanto tenho no BAI», «minhas dívidas».\n· Conceitos: «o que é custódia?», «como calcular lucro?».\n· Confirma sempre antes de gravar.",
       },
     ],
   },
@@ -474,7 +517,7 @@ export const GLOSSARIO: ManualSection[] = [
     terms: [
       {
         t: "Património líquido",
-        d: "Próprio + bens + participações + a receber − dívidas próprias − C/C à empresa. Custódia fora.",
+        d: "Próprio + bens + participações + a receber − dívidas próprias − C/C à empresa. Custódia fora do líquido. É riqueza estimada, não dinheiro para gastar amanhã.",
       },
       {
         t: "Dinheiro (no património)",
@@ -482,27 +525,27 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Bens / activos",
-        d: "Itens com valor declarado (PS5, TV, equipamentos…).",
+        d: "Itens com valor declarado (PS5, TV, equipamentos…). Actualiza quando o valor mudar — afecta património, não a caixa.",
       },
       {
         t: "Participações nas empresas",
-        d: "Soma do equity das quatro empresas.",
+        d: "Soma do equity das quatro empresas. É a tua fatia contabilística, não um bolso para gastar.",
       },
       {
         t: "Posição",
-        d: "Teu + a receber − dívida própria (visão rápida).",
+        d: "Teu + a receber − dívida própria (visão rápida no Eu).",
       },
       {
         t: "Equity",
-        d: "Caixa + a receber − a pagar + bens da entidade.",
+        d: "Caixa + a receber − a pagar + bens da entidade. Mede a «saúde» da empresa no painel.",
       },
       {
         t: "Fluxo (mês)",
-        d: "Movimentos reais do mês — não o salário declarado.",
+        d: "Movimentos reais do mês — não o salário declarado. Entradas, despesas, transferências, investimentos, dívidas pagas, interempresa, alocações.",
       },
       {
         t: "Entradas reais",
-        d: "Receitas pessoais registadas no mês.",
+        d: "Receitas pessoais registadas no mês. Compara com renda planeada no Orçamento.",
       },
       {
         t: "Receita mês / Lucro mês",
@@ -514,11 +557,11 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Lucro esperado",
-        d: "Receita − max(despesas registadas, custos planeados).",
+        d: "Receita − max(despesas registadas, custos planeados). Mostra o buraco «por registar».",
       },
       {
         t: "Custos planeados / recorrentes",
-        d: "Inventário mensal do que a empresa deve pagar. Não move caixa até registares.",
+        d: "Inventário mensal do que a empresa deve pagar. Não move caixa até registares no ledger.",
       },
       {
         t: "Por registar",
@@ -534,7 +577,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Alertas",
-        d: "Avisos do sistema (alocável, C/C, atraso Plural, etc.).",
+        d: "Avisos do sistema (alocável, C/C, atraso Plural, etc.). Trata-os na Decisão ou no Registo.",
       },
     ],
   },
@@ -664,3 +707,83 @@ export const GLOSSARIO: ManualSection[] = [
     ],
   },
 ];
+
+function foldManual(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
+}
+
+/** Todos os termos do manual (regras, distinções, glossário). */
+export function allManualTerms(): ManualTerm[] {
+  return [...REGRAS, ...DISTINCOES, ...GLOSSARIO.flatMap((s) => s.terms)];
+}
+
+/**
+ * Procura definição no Caderno.
+ * Ex.: «custódia», «alocável», «pró-labore», «como calcular lucro».
+ */
+export function findManualDefinition(topic: string): ManualTerm | null {
+  const raw = foldManual(topic).replace(/[?!.,;:]+$/g, "").trim();
+  const wantsHow = /\bcomo\b/.test(raw) || /\b(calcular|fazer|registar)\b/.test(raw);
+
+  // Palavras de conteúdo (ignora ruído: como, calcular, um, e, …)
+  const stop = new Set([
+    "a",
+    "o",
+    "as",
+    "os",
+    "um",
+    "uma",
+    "uns",
+    "umas",
+    "e",
+    "de",
+    "do",
+    "da",
+    "em",
+    "no",
+    "na",
+    "como",
+    "calcular",
+    "fazer",
+    "registar",
+    "meter",
+    "definir",
+    "usar",
+    "ler",
+    "tirar",
+    "que",
+    "significa",
+    "explica",
+  ]);
+  const qWords = raw.match(/[a-z0-9]+/g)?.filter((w) => w.length >= 3 && !stop.has(w)) ?? [];
+  if (!qWords.length) return null;
+
+  let best: { term: ManualTerm; score: number } | null = null;
+  for (const term of allManualTerms()) {
+    const title = foldManual(term.t);
+    const titleWords = title.match(/[a-z0-9]+/g) ?? [];
+    const titleCompact = title.replace(/[\s\-]+/g, "");
+    let score = 0;
+
+    for (const w of qWords) {
+      if (titleWords.includes(w)) score += 50;
+      else if (titleWords.some((tw) => tw.startsWith(w) || w.startsWith(tw))) score += 20;
+      else if (title.includes(w)) score += 15;
+    }
+    // Todas as palavras-chave do pedido estão no título
+    if (qWords.every((w) => title.includes(w))) score += 40;
+    // Compact match: prolabore ↔ pró-labore
+    const qCompact = qWords.join("");
+    if (qCompact.length >= 4 && titleCompact.includes(qCompact)) score += 30;
+
+    if (wantsHow && title.startsWith("como ")) score += 35;
+    if (!wantsHow && title.startsWith("como ")) score -= 20;
+
+    if (score > 0 && (!best || score > best.score)) best = { term, score };
+  }
+  // Exigir overlap real (pelo menos uma palavra forte)
+  return best && best.score >= 50 ? best.term : null;
+}

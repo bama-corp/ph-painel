@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import {
   interpretChat,
   proposalKindLabel,
+  type ClarifyOption,
   type ReportProposal,
 } from "../domain/dailyReport";
 import { todayIso } from "../domain/money";
@@ -14,12 +15,13 @@ type ChatMsg = {
   role: "user" | "assistant";
   text: string;
   proposal?: ReportProposal;
-  status?: "pending" | "done" | "skipped" | "failed";
+  clarifyOptions?: ClarifyOption[];
+  status?: "pending" | "done" | "skipped" | "failed" | "clarify";
   failReason?: string;
 };
 
 const WELCOME =
-  "Olá. Conta o que aconteceu; eu proponho e tu confirmas.\nPodes corrigir depois: «na caixa pessoal», «no BAI», «foi 25000», «sim», «não».";
+  "Olá. Saldos («quanto tenho no BAI»), conceitos («o que é custódia?», «como calcular um pró-labore?») ou o que aconteceu no dia — eu proponho e tu confirmas.\nCorrecções: «na caixa pessoal», «foi 25000», «sim», «não».";
 
 function uid() {
   return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -40,6 +42,16 @@ function proposalReply(p: ReportProposal, preface?: string): ChatMsg {
     text: `${head}${p.summary}\n${p.detail}\n\nGravo no ledger?`,
     proposal: p,
     status: "pending",
+  };
+}
+
+function clarifyReply(text: string, options: ClarifyOption[]): ChatMsg {
+  return {
+    id: uid(),
+    role: "assistant",
+    text,
+    clarifyOptions: options,
+    status: "clarify",
   };
 }
 
@@ -69,6 +81,23 @@ export function AssistenteFab() {
       if (m.status === "pending" && m.proposal) return m;
     }
     return null;
+  }
+
+  function clearPending(list: ChatMsg[], note = "(substituído)") {
+    return list.map((m) =>
+      m.status === "pending" || m.status === "clarify"
+        ? {
+            ...m,
+            status: "skipped" as const,
+            text:
+              m.status === "pending"
+                ? m.text.replace(/\n\nGravo no ledger\?$/, "") + `\n\n${note}`
+                : `${m.text}\n\n${note}`,
+            proposal: undefined,
+            clarifyOptions: undefined,
+          }
+        : m,
+    );
   }
 
   function send(text: string) {
@@ -137,28 +166,46 @@ export function AssistenteFab() {
       return;
     }
 
-    // fresh
+    if (turn.type === "info") {
+      setMsgs((m) => [
+        ...m,
+        userMsg,
+        { id: uid(), role: "assistant", text: turn.text },
+      ]);
+      setInput("");
+      return;
+    }
+
+    if (turn.type === "clarify") {
+      setMsgs((list) => [...clearPending(list), userMsg, clarifyReply(turn.text, turn.options)]);
+      setInput("");
+      return;
+    }
+
     const proposal = turn.type === "fresh" ? turn.proposal : null;
     if (!proposal) {
       setInput("");
       return;
     }
 
-    // nova frase cancela pendente antiga
-    setMsgs((list) => {
-      const cleared = list.map((m) =>
-        m.status === "pending"
+    setMsgs((list) => [...clearPending(list), userMsg, proposalReply(proposal)]);
+    setInput("");
+  }
+
+  function pickClarify(msgId: string, option: ClarifyOption) {
+    setMsgs((list) => [
+      ...list.map((m) =>
+        m.id === msgId
           ? {
               ...m,
               status: "skipped" as const,
-              text: m.text.replace(/\n\nGravo no ledger\?$/, "") + "\n\n(substituído)",
-              proposal: undefined,
+              text: `Escolheste: ${option.label}`,
+              clarifyOptions: undefined,
             }
           : m,
-      );
-      return [...cleared, userMsg, proposalReply(proposal)];
-    });
-    setInput("");
+      ),
+      proposalReply(option.proposal, `Ok — ${option.label}:`),
+    ]);
   }
 
   function onSubmit(e: FormEvent) {
@@ -220,6 +267,7 @@ export function AssistenteFab() {
               status: "skipped",
               text: "Ok, ignorei. Diz de outra forma se quiseres.",
               proposal: undefined,
+              clarifyOptions: undefined,
             }
           : m,
       ),
@@ -255,7 +303,7 @@ export function AssistenteFab() {
     return { ok: false, reason: "Acção desconhecida." };
   }
 
-  const pending = msgs.some((m) => m.status === "pending");
+  const pending = msgs.some((m) => m.status === "pending" || m.status === "clarify");
 
   return (
     <div className="pointer-events-none fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 sm:bottom-8 sm:right-8">
@@ -306,17 +354,63 @@ export function AssistenteFab() {
                             ? "pine"
                             : m.status === "failed"
                               ? "rust"
-                              : m.status === "pending"
+                              : m.status === "pending" || m.status === "clarify"
                                 ? "copper"
                                 : "soft"
                         }
                       />
                       {m.proposal && m.status === "pending"
                         ? proposalKindLabel(m.proposal)
-                        : "Assistente"}
+                        : m.status === "clarify"
+                          ? "Clarificar"
+                          : "Assistente"}
                     </p>
                   ) : null}
-                  <p className="whitespace-pre-wrap">{m.text}</p>
+                  {m.role === "assistant" && m.text.includes("\n\n") ? (
+                    <div className="space-y-2">
+                      {m.text.split(/\n\n+/).map((block, i) => {
+                        const isTitle = i === 0 && !block.startsWith("—") && !block.startsWith("·");
+                        const isFooter = block.startsWith("—");
+                        return (
+                          <p
+                            key={i}
+                            className={
+                              isTitle
+                                ? "font-display text-[0.95rem] font-semibold tracking-tight text-ink whitespace-pre-wrap"
+                                : isFooter
+                                  ? "text-[0.7rem] uppercase tracking-[0.12em] text-ink/40 whitespace-pre-wrap"
+                                  : "whitespace-pre-wrap"
+                            }
+                          >
+                            {block}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{m.text}</p>
+                  )}
+                  {m.clarifyOptions && m.status === "clarify" ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {m.clarifyOptions.map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          className="btn-ghost py-1.5 text-xs"
+                          onClick={() => pickClarify(m.id, opt)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="btn-ghost py-1.5 text-xs text-ink/45"
+                        onClick={() => skipProposal(m.id)}
+                      >
+                        Ignorar
+                      </button>
+                    </div>
+                  ) : null}
                   {m.proposal && m.status === "pending" ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
