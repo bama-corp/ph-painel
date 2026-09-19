@@ -73,8 +73,14 @@ export function Eu() {
               <Mark tone="pine" /> Dinheiro pessoal
             </p>
             <div className="mt-3">
-              <Money n={p.dinheiro} large />
+              <Money n={p.proprio} large />
             </div>
+            {p.custodia > 0.001 ? (
+              <p className="mt-2 max-w-sm text-[0.78rem] leading-relaxed text-ink/40">
+                Bruto nos bancos {p.dinheiro.toLocaleString("pt-PT")} Kz · custódia{" "}
+                {p.custodia.toLocaleString("pt-PT")} Kz (não é teu)
+              </p>
+            ) : null}
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink/55">
               {u > 1 ? (
                 <>
