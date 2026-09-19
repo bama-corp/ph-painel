@@ -204,8 +204,8 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
       <p className="mt-1.5 text-sm leading-relaxed text-ink/55">
         Camada 1 — o que aconteceu. Sem isto as outras camadas mentem.
       </p>
-      <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-        <label className="field-label col-span-2 sm:col-span-1">
+      <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
+        <label className="field-label sm:col-span-1">
           Entidade
           <Select
             value={entityId}
@@ -227,7 +227,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         <label className="field-label">
           Valor (Kz)
           <input
-            className="field num text-sm font-normal normal-case tracking-normal text-ink"
+            className="field num text-base font-normal normal-case tracking-normal text-ink sm:text-sm"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             inputMode="decimal"
@@ -255,7 +255,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
           </label>
         )}
         {entityId === "pessoal" && kind === "despesa" && (
-          <label className="field-label col-span-2">
+          <label className="field-label col-span-full sm:col-span-2">
             Bolso
             <Select value={envelopeId} onChange={setEnvelopeId} options={envelopeOptions} />
           </label>
@@ -263,7 +263,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         <label className="field-label">
           Método
           <input
-            className="field text-sm font-normal normal-case tracking-normal text-ink"
+            className="field text-base font-normal normal-case tracking-normal text-ink sm:text-sm"
             value={method}
             onChange={(e) => setMethod(e.target.value)}
           />
@@ -271,15 +271,15 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
         <label className="field-label">
           Responsável
           <input
-            className="field text-sm font-normal normal-case tracking-normal text-ink"
+            className="field text-base font-normal normal-case tracking-normal text-ink sm:text-sm"
             value={responsible}
             onChange={(e) => setResponsible(e.target.value)}
           />
         </label>
-        <label className="field-label col-span-2">
+        <label className="field-label col-span-full sm:col-span-2">
           Observação
           <input
-            className="field text-sm font-normal normal-case tracking-normal text-ink"
+            className="field text-base font-normal normal-case tracking-normal text-ink sm:text-sm"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />

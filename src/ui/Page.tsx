@@ -21,7 +21,7 @@ export function Mark({ tone = "ink" }: { tone?: MarkTone }) {
 /** Linha com marca ao centro — separador de bloco. */
 export function Sep() {
   return (
-    <div className="sep my-12 sm:my-14" role="separator">
+    <div className="sep my-10 sm:my-14" role="separator">
       <Mark tone="soft" />
     </div>
   );
@@ -48,7 +48,7 @@ export function PageHeader({
         <span className="sep-line flex-1" />
         <Mark tone="soft" />
       </div>
-      <h1 className="font-display text-[2rem] font-semibold leading-[1.05] tracking-tight sm:text-[2.65rem]">
+      <h1 className="font-display text-[1.75rem] font-semibold leading-[1.05] tracking-tight sm:text-[2.65rem]">
         {title}
       </h1>
       {children ? <div className="lede">{children}</div> : null}
@@ -72,7 +72,7 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className={`mt-14 scroll-mt-8 sm:mt-16 ${className}`}>
+    <section id={id} className={`mt-10 scroll-mt-8 sm:mt-16 ${className}`}>
       <div className="section-head">
         <Mark tone={mark ?? "ink"} />
         <h2 className="section-title">{title}</h2>

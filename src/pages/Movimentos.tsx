@@ -84,7 +84,7 @@ export function Movimentos() {
                 <span className="num text-base">{kz(m.amount)}</span>
                 <button
                   type="button"
-                  className={`btn-ghost py-1 text-xs ${
+                  className={`btn-ghost !min-h-10 py-2 text-xs sm:!min-h-0 sm:py-1 ${
                     confirmId === m.id ? "border-rust/40 text-rust" : "text-ink/40"
                   }`}
                   onClick={() => onDelete(m.id)}

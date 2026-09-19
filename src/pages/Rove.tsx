@@ -71,7 +71,7 @@ export function Rove() {
       <CompanyRecurring entity="rove" showProduct />
 
       <Section title="Clientes" mark={meta.tone}>
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-ink/15">

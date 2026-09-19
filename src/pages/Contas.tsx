@@ -59,11 +59,11 @@ export function Contas() {
         mark="pine"
         hint={`Bruto ${liq.toLocaleString("pt-PT")} Kz · custódia ${custodia.toLocaleString("pt-PT")} Kz (não é teu).`}
       >
-        <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)] gap-x-3 text-[0.62rem] font-medium uppercase tracking-[0.12em] text-ink/30">
+        <div className="liq-head">
           <span>Conta</span>
-          <span className="text-right">Total</span>
-          <span className="text-right">Custódia</span>
-          <span className="text-right">Teu</span>
+          <span>Total</span>
+          <span>Custódia</span>
+          <span>Teu</span>
         </div>
         <ul>
           {personalAccounts.map((a) => {
@@ -73,21 +73,34 @@ export function Contas() {
             const own = ownLiquidityOf(state, a.id);
             const over = cust > total + 0.001;
             return (
-              <li key={a.id} className="border-b border-ink/[0.07] py-2.5">
-                <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)_minmax(5.5rem,0.7fr)] items-baseline gap-x-3">
-                  <span className="truncate text-sm text-ink/70">{a.name}</span>
-                  <span className="text-right">
-                    <Money n={total} />
+              <li key={a.id} className="border-b border-ink/[0.07] py-3 sm:py-2.5">
+                <div className="liq-row">
+                  <span className="truncate text-sm font-medium text-ink/80 sm:font-normal sm:text-ink/70">
+                    {a.name}
                   </span>
-                  <span className="text-right">
-                    <Money n={cust} tone="mute" />
-                  </span>
-                  <span className="text-right">
-                    <Money n={own} tone={own > 0 ? "plain" : "mute"} />
-                  </span>
+                  <div className="liq-row-nums">
+                    <div className="liq-num">
+                      <span className="liq-num-label">Total</span>
+                      <span className="liq-num-value">
+                        <Money n={total} />
+                      </span>
+                    </div>
+                    <div className="liq-num">
+                      <span className="liq-num-label">Custódia</span>
+                      <span className="liq-num-value">
+                        <Money n={cust} tone="mute" />
+                      </span>
+                    </div>
+                    <div className="liq-num">
+                      <span className="liq-num-label">Teu</span>
+                      <span className="liq-num-value">
+                        <Money n={own} tone={own > 0 ? "plain" : "mute"} />
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 {editable ? (
-                  <label className="mt-1.5 flex max-w-xs items-baseline gap-2">
+                  <label className="mt-2 flex max-w-xs items-baseline gap-2 sm:mt-1.5">
                     <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/30">
                       opening
                     </span>
@@ -405,8 +418,8 @@ function PartyRow({
   }
 
   return (
-    <li className="border-b border-ink/[0.07] py-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-baseline gap-x-4">
+    <li className="border-b border-ink/[0.07] py-3.5 sm:py-3">
+      <div className="flex flex-col gap-1.5 sm:grid sm:grid-cols-[minmax(0,1fr)_8.5rem] sm:items-baseline sm:gap-x-4">
         <div className="min-w-0">
           <p className="truncate text-sm text-ink/80">
             {party.name}
@@ -420,11 +433,11 @@ function PartyRow({
             ) : null}
           </p>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <Money n={value} />
           {canEditOpening ? (
             <input
-              className="field num m-0 mt-1 w-full py-1 text-right text-sm"
+              className="field num m-0 mt-1 w-full max-w-[8.5rem] py-1 text-right text-sm sm:max-w-none"
               defaultValue={party.opening || ""}
               placeholder="opening"
               onBlur={(e) => onSetOpening(Number(String(e.target.value).replace(",", ".")) || 0)}
@@ -451,20 +464,35 @@ function PartyRow({
           {actionHint ? <p className="mb-1.5 text-[0.7rem] text-ink/40">{actionHint}</p> : null}
           <div className="flex flex-wrap items-end gap-2">
             <input
-              className="field num m-0 w-28 py-1 text-sm"
+              className="field num m-0 w-full max-w-[9rem] flex-1 py-2 text-base sm:w-28 sm:flex-none sm:py-1 sm:text-sm"
               inputMode="decimal"
               placeholder="Valor"
               value={payRaw}
               onChange={(e) => setPayRaw(e.target.value)}
             />
-            <button type="button" className="btn-ghost py-1 text-sm" onClick={runPay}>
+            <button
+              type="button"
+              className="btn-ghost !min-h-11 flex-1 sm:!min-h-0 sm:flex-none sm:py-1 sm:text-sm"
+              onClick={runPay}
+            >
               {actionLabel}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 px-2 text-xs text-ink/40 hover:text-rust sm:min-h-0"
+              onClick={runRemove}
+            >
+              Remover
             </button>
           </div>
         </div>
       ) : (
         <div className="mt-2">
-          <button type="button" className="text-xs text-ink/40 hover:text-rust" onClick={runRemove}>
+          <button
+            type="button"
+            className="min-h-10 text-xs text-ink/40 hover:text-rust sm:min-h-0"
+            onClick={runRemove}
+          >
             Remover
           </button>
         </div>

@@ -60,7 +60,7 @@ export function Definicao() {
         (Distribuir entrada / simulação).
       </PageHeader>
 
-      <div className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-b border-ink/12 pb-3 text-sm">
+      <div className="page-tabs mt-10 text-sm" role="tablist" aria-label="Secções da definição">
         {(
           [
             ["regras", "Regras"],
@@ -71,12 +71,14 @@ export function Definicao() {
           <button
             key={id}
             type="button"
+            role="tab"
+            aria-selected={tab === id}
             onClick={() => setTab(id)}
-            className={
+            className={`page-tab ${
               tab === id
-                ? "border-b-2 border-ink pb-2 font-medium text-ink"
-                : "pb-2 text-ink/45 hover:text-ink"
-            }
+                ? "border-b-2 border-ink font-medium text-ink"
+                : "text-ink/45 hover:text-ink"
+            }`}
           >
             {label}
           </button>

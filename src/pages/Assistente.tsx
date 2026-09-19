@@ -10,10 +10,16 @@ import { useStore } from "../domain/store";
 import { DateField } from "../ui/DateField";
 import { Mark } from "../ui/Page";
 
+type MsgKind = "welcome" | "info" | "proposal" | "clarify" | "status" | "user";
+
 type ChatMsg = {
   id: string;
   role: "user" | "assistant";
+  kind: MsgKind;
   text: string;
+  title?: string;
+  body?: string;
+  footer?: string;
   proposal?: ReportProposal;
   clarifyOptions?: ClarifyOption[];
   status?: "pending" | "done" | "skipped" | "failed" | "clarify";
@@ -21,10 +27,47 @@ type ChatMsg = {
 };
 
 const WELCOME =
-  "Olá. Saldos («quanto tenho no BAI»), conceitos («o que é custódia?», «como calcular um pró-labore?») ou o que aconteceu no dia — eu proponho e tu confirmas.\nCorrecções: «na caixa pessoal», «foi 25000», «sim», «não».";
+  "Saldos, conceitos do Caderno ou o que aconteceu no dia — eu proponho, tu confirmas.";
+
+const CHIPS = [
+  "Saldo BAI",
+  "Minhas dívidas",
+  "O que é custódia?",
+  "Como calcular lucro?",
+] as const;
 
 function uid() {
   return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Parte respostas do Caderno / saldo em título · corpo · rodapé. */
+function parseInfoText(text: string): Pick<ChatMsg, "title" | "body" | "footer" | "text"> {
+  const parts = text.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return { text };
+  const last = parts[parts.length - 1]!;
+  if (last.startsWith("—") && parts.length >= 2) {
+    const footer = last;
+    const title = parts[0];
+    const body = parts.slice(1, -1).join("\n\n") || undefined;
+    return { text, title, body, footer };
+  }
+  if (parts.length >= 2) {
+    return { text, title: parts[0], body: parts.slice(1).join("\n\n") };
+  }
+  return { text, body: text };
+}
+
+function infoReply(text: string): ChatMsg {
+  return {
+    id: uid(),
+    role: "assistant",
+    kind: "info",
+    ...parseInfoText(text),
+  };
+}
+
+function statusReply(text: string): ChatMsg {
+  return { id: uid(), role: "assistant", kind: "status", text };
 }
 
 function proposalReply(p: ReportProposal, preface?: string): ChatMsg {
@@ -32,14 +75,18 @@ function proposalReply(p: ReportProposal, preface?: string): ChatMsg {
     return {
       id: uid(),
       role: "assistant",
+      kind: "info",
       text: `${p.summary}.\n${p.detail}`,
+      title: p.summary,
+      body: p.detail,
     };
   }
-  const head = preface ? `${preface}\n\n` : "Percebi isto:\n\n";
   return {
     id: uid(),
     role: "assistant",
-    text: `${head}${p.summary}\n${p.detail}\n\nGravo no ledger?`,
+    kind: "proposal",
+    text: preface ? `${preface}\n${p.summary}\n${p.detail}` : `${p.summary}\n${p.detail}`,
+    title: preface,
     proposal: p,
     status: "pending",
   };
@@ -49,10 +96,63 @@ function clarifyReply(text: string, options: ClarifyOption[]): ChatMsg {
   return {
     id: uid(),
     role: "assistant",
+    kind: "clarify",
     text,
     clarifyOptions: options,
     status: "clarify",
   };
+}
+
+function BodyLines({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) => {
+        const step = /^(\d+)[.)]\s+(.*)$/.exec(line);
+        const bullet = /^[·•]\s*(.*)$/.exec(line);
+        if (step) {
+          return (
+            <p key={i} className="chat-step flex gap-2.5 text-[0.8rem] leading-relaxed text-ink/70">
+              <span className="num shrink-0 w-5 text-ink/40">{step[1]}.</span>
+              <span className="min-w-0 flex-1">{step[2]}</span>
+            </p>
+          );
+        }
+        if (bullet) {
+          return (
+            <p key={i} className="flex gap-2.5 text-[0.8rem] leading-relaxed text-ink/70">
+              <span className="shrink-0 text-ink/35">·</span>
+              <span className="min-w-0 flex-1">{bullet[1]}</span>
+            </p>
+          );
+        }
+        if (!line.trim()) return <div key={i} className="h-1.5" />;
+        return (
+          <p key={i} className="text-[0.8rem] leading-relaxed text-ink/70 whitespace-pre-wrap">
+            {line}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChipRow({ onPick, disabled }: { onPick: (t: string) => void; disabled?: boolean }) {
+  return (
+    <div className="assistente-chips">
+      {CHIPS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          disabled={disabled}
+          className="assistente-chip"
+          onClick={() => onPick(c)}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function AssistenteFab() {
@@ -61,7 +161,7 @@ export function AssistenteFab() {
   const [at, setAt] = useState(todayIso);
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([
-    { id: "welcome", role: "assistant", text: WELCOME },
+    { id: "welcome", role: "assistant", kind: "welcome", text: WELCOME },
   ]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +172,32 @@ export function AssistenteFab() {
   }, [msgs, open]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
+    if (!open) return;
+    // No telemóvel o teclado a abrir logo cobre o sheet; no desktop focamos.
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) {
+      inputRef.current?.focus();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
   function pendingMsg(list: ChatMsg[] = msgs) {
@@ -88,11 +213,14 @@ export function AssistenteFab() {
       m.status === "pending" || m.status === "clarify"
         ? {
             ...m,
+            kind: "status" as const,
             status: "skipped" as const,
             text:
               m.status === "pending"
-                ? m.text.replace(/\n\nGravo no ledger\?$/, "") + `\n\n${note}`
+                ? `${m.proposal?.summary ?? m.text}\n\n${note}`
                 : `${m.text}\n\n${note}`,
+            title: undefined,
+            body: undefined,
             proposal: undefined,
             clarifyOptions: undefined,
           }
@@ -103,7 +231,7 @@ export function AssistenteFab() {
   function send(text: string) {
     const line = text.trim();
     if (!line) return;
-    const userMsg: ChatMsg = { id: uid(), role: "user", text: line };
+    const userMsg: ChatMsg = { id: uid(), role: "user", kind: "user", text: line };
     const pend = pendingMsg();
     const turn = interpretChat(line, state, at, pend?.proposal ?? null);
 
@@ -120,18 +248,16 @@ export function AssistenteFab() {
           m.id === pend.id
             ? {
                 ...m,
+                kind: "status" as const,
                 status: "skipped" as const,
                 text: "Ok, ignorei.",
                 proposal: undefined,
+                clarifyOptions: undefined,
               }
             : m,
         ),
         userMsg,
-        {
-          id: uid(),
-          role: "assistant",
-          text: "Descartado. Diz outra coisa do dia quando quiseres.",
-        },
+        statusReply("Descartado. Diz outra coisa do dia quando quiseres."),
       ]);
       setInput("");
       return;
@@ -143,6 +269,7 @@ export function AssistenteFab() {
           m.id === pend.id
             ? {
                 ...m,
+                kind: "status" as const,
                 status: "skipped" as const,
                 text: `Actualizado (${turn.tip}).`,
                 proposal: undefined,
@@ -157,21 +284,13 @@ export function AssistenteFab() {
     }
 
     if (turn.type === "orphan_fix") {
-      setMsgs((m) => [
-        ...m,
-        userMsg,
-        { id: uid(), role: "assistant", text: turn.text },
-      ]);
+      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
       setInput("");
       return;
     }
 
     if (turn.type === "info") {
-      setMsgs((m) => [
-        ...m,
-        userMsg,
-        { id: uid(), role: "assistant", text: turn.text },
-      ]);
+      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
       setInput("");
       return;
     }
@@ -198,6 +317,7 @@ export function AssistenteFab() {
         m.id === msgId
           ? {
               ...m,
+              kind: "status" as const,
               status: "skipped" as const,
               text: `Escolheste: ${option.label}`,
               clarifyOptions: undefined,
@@ -230,7 +350,7 @@ export function AssistenteFab() {
                 ...m,
                 status: "pending" as const,
                 failReason: r.reason,
-                text: `Não deu.\n${r.reason}\n\nCorrige a conta/valor («na caixa», «foi 20000») ou ignora.`,
+                text: `Não deu.\n${r.reason}`,
                 proposal: p,
               }
             : m,
@@ -243,18 +363,17 @@ export function AssistenteFab() {
         m.id === msgId
           ? {
               ...m,
+              kind: "status" as const,
               status: "done" as const,
               text: `Gravado.\n${p.summary}\n${p.detail}`,
+              title: "Gravado",
+              body: `${p.summary}\n${p.detail}`,
               proposal: undefined,
               failReason: undefined,
             }
           : m,
       ),
-      {
-        id: uid(),
-        role: "assistant",
-        text: "Feito. Mais alguma coisa?",
-      },
+      statusReply("Feito. Mais alguma coisa?"),
     ]);
   }
 
@@ -264,6 +383,7 @@ export function AssistenteFab() {
         m.id === msgId
           ? {
               ...m,
+              kind: "status" as const,
               status: "skipped",
               text: "Ok, ignorei. Diz de outra forma se quiseres.",
               proposal: undefined,
@@ -304,168 +424,117 @@ export function AssistenteFab() {
   }
 
   const pending = msgs.some((m) => m.status === "pending" || m.status === "clarify");
+  const onlyWelcome = msgs.length === 1 && msgs[0]?.kind === "welcome";
 
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 sm:bottom-8 sm:right-8">
+    <div
+      className={`assistente-fab-wrap pointer-events-none fixed z-40 flex flex-col items-end gap-3 ${
+        open ? "is-open" : ""
+      }`}
+    >
       {open ? (
-        <div
-          className="pointer-events-auto flex h-[min(32rem,calc(100vh-7rem))] w-[min(22rem,calc(100vw-2.5rem))] flex-col border border-ink/15 shadow-[0_12px_40px_rgb(var(--ink)/0.12)]"
-          style={{ background: "rgb(var(--paper))" }}
-          role="dialog"
-          aria-label="Assistente"
-        >
-          <header className="flex items-center gap-3 border-b border-ink/10 px-4 py-3">
-            <Mark tone="pine" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-ink">Assistente</p>
-              <label className="mt-0.5 flex items-center gap-2 text-[0.65rem] text-ink/40">
-                <span className="uppercase tracking-[0.14em]">Data</span>
-                <DateField inline value={at} onChange={setAt} className="min-w-[7.5rem]" />
-              </label>
-            </div>
-            <button
-              type="button"
-              className="text-ink/35 transition-colors hover:text-ink"
-              aria-label="Fechar"
-              onClick={() => setOpen(false)}
-            >
-              ✕
-            </button>
-          </header>
-
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {msgs.map((m) => (
-              <div
-                key={m.id}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={
-                    m.role === "user"
-                      ? "max-w-[90%] border border-ink/15 bg-wash/80 px-3 py-2 text-[0.8rem] leading-relaxed text-ink"
-                      : "max-w-[95%] text-[0.8rem] leading-relaxed text-ink/75"
-                  }
-                >
-                  {m.role === "assistant" ? (
-                    <p className="eyebrow mb-1.5 flex items-center gap-1.5 text-[0.6rem]">
-                      <Mark
-                        tone={
-                          m.status === "done"
-                            ? "pine"
-                            : m.status === "failed"
-                              ? "rust"
-                              : m.status === "pending" || m.status === "clarify"
-                                ? "copper"
-                                : "soft"
-                        }
-                      />
-                      {m.proposal && m.status === "pending"
-                        ? proposalKindLabel(m.proposal)
-                        : m.status === "clarify"
-                          ? "Clarificar"
-                          : "Assistente"}
-                    </p>
-                  ) : null}
-                  {m.role === "assistant" && m.text.includes("\n\n") ? (
-                    <div className="space-y-2">
-                      {m.text.split(/\n\n+/).map((block, i) => {
-                        const isTitle = i === 0 && !block.startsWith("—") && !block.startsWith("·");
-                        const isFooter = block.startsWith("—");
-                        return (
-                          <p
-                            key={i}
-                            className={
-                              isTitle
-                                ? "font-display text-[0.95rem] font-semibold tracking-tight text-ink whitespace-pre-wrap"
-                                : isFooter
-                                  ? "text-[0.7rem] uppercase tracking-[0.12em] text-ink/40 whitespace-pre-wrap"
-                                  : "whitespace-pre-wrap"
-                            }
-                          >
-                            {block}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{m.text}</p>
-                  )}
-                  {m.clarifyOptions && m.status === "clarify" ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {m.clarifyOptions.map((opt) => (
-                        <button
-                          key={opt.label}
-                          type="button"
-                          className="btn-ghost py-1.5 text-xs"
-                          onClick={() => pickClarify(m.id, opt)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="btn-ghost py-1.5 text-xs text-ink/45"
-                        onClick={() => skipProposal(m.id)}
-                      >
-                        Ignorar
-                      </button>
-                    </div>
-                  ) : null}
-                  {m.proposal && m.status === "pending" ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="btn-solid py-1.5 text-xs"
-                        onClick={() => applyProposal(m.id, m.proposal!)}
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-ghost py-1.5 text-xs"
-                        onClick={() => skipProposal(m.id)}
-                      >
-                        Ignorar
-                      </button>
-                    </div>
-                  ) : null}
-                  {m.status === "failed" && m.failReason ? (
-                    <p className="mt-1.5 text-[0.7rem] text-rust">{m.failReason}</p>
-                  ) : null}
+        <>
+          <button
+            type="button"
+            className="assistente-backdrop"
+            aria-label="Fechar assistente"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="assistente-panel pointer-events-auto flex flex-col border border-ink/15 shadow-[0_12px_40px_rgb(var(--ink)/0.12)]"
+            style={{ background: "rgb(var(--paper))" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Assistente"
+          >
+            <header className="flex shrink-0 items-center gap-3 border-b border-ink/10 px-4 py-3 sm:px-5">
+              <Mark tone={pending ? "copper" : "pine"} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p className="font-display text-[1.1rem] font-semibold tracking-tight text-ink sm:text-[1.05rem]">
+                    Assistente
+                  </p>
+                  <label className="flex items-center gap-2 text-[0.65rem] text-ink/40">
+                    <span className="uppercase tracking-[0.14em]">Data</span>
+                    <DateField inline value={at} onChange={setAt} className="min-w-[7.5rem]" />
+                  </label>
                 </div>
               </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
+              <button
+                type="button"
+                className="flex h-10 w-10 shrink-0 items-center justify-center text-ink/35 transition-colors hover:text-ink sm:h-auto sm:w-auto"
+                aria-label="Fechar"
+                onClick={() => setOpen(false)}
+              >
+                ✕
+              </button>
+            </header>
 
-          <form
-            className="flex gap-2 border-t border-ink/10 px-3 py-3"
-            onSubmit={onSubmit}
-          >
-            <input
-              ref={inputRef}
-              className="field flex-1 py-2 text-sm font-normal normal-case tracking-normal text-ink"
-              placeholder={
-                pending ? "na caixa · foi 25000 · sim…" : "Emprestei 2000kz na PDS…"
-              }
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-            />
-            <button
-              type="submit"
-              className="btn-solid shrink-0 px-3 py-2 text-sm"
-              disabled={!input.trim()}
+            <div
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5"
+              aria-live="polite"
+              aria-relevant="additions"
             >
-              →
-            </button>
-          </form>
-        </div>
+              {msgs.map((m) => (
+                <MessageBubble
+                  key={m.id}
+                  msg={m}
+                  onConfirm={() => m.proposal && applyProposal(m.id, m.proposal)}
+                  onSkip={() => skipProposal(m.id)}
+                  onClarify={(opt) => pickClarify(m.id, opt)}
+                />
+              ))}
+              {onlyWelcome ? (
+                <div className="pt-1">
+                  <p className="mb-2 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
+                    Atalhos
+                  </p>
+                  <ChipRow onPick={send} disabled={pending} />
+                </div>
+              ) : null}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="shrink-0 border-t border-ink/10 px-3 py-3 sm:px-4">
+              {!onlyWelcome ? (
+                <div className="mb-2.5">
+                  <ChipRow onPick={send} disabled={pending} />
+                </div>
+              ) : null}
+              <form className="flex gap-2" onSubmit={onSubmit}>
+                <input
+                  ref={inputRef}
+                  className="assistente-composer-input"
+                  placeholder={
+                    pending
+                      ? "na caixa · foi 25000 · sim…"
+                      : "Emprestei 2000kz… ou um conceito"
+                  }
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  enterKeyHint="send"
+                  autoComplete="off"
+                  autoCorrect="off"
+                />
+                <button
+                  type="submit"
+                  className="btn-solid shrink-0 px-4 py-2.5 text-base sm:px-3 sm:py-2 sm:text-sm"
+                  disabled={!input.trim()}
+                >
+                  →
+                </button>
+              </form>
+            </div>
+          </div>
+        </>
       ) : null}
 
       <button
         type="button"
-        className="pointer-events-auto flex h-12 w-12 items-center justify-center border border-ink/20 text-ink transition-colors hover:border-ink hover:bg-wash"
+        className={`pointer-events-auto flex h-14 w-14 items-center justify-center border border-ink/20 text-ink transition-colors hover:border-ink hover:bg-wash sm:h-12 sm:w-12 ${
+          open ? "hidden sm:flex" : ""
+        }`}
         style={{ background: "rgb(var(--paper))" }}
         aria-label={open ? "Fechar assistente" : "Abrir assistente"}
         aria-expanded={open}
@@ -478,13 +547,164 @@ export function AssistenteFab() {
             <Mark tone={pending ? "copper" : "pine"} />
             {pending ? (
               <span
-                className="absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full"
+                className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full sm:h-2 sm:w-2"
                 style={{ background: "rgb(var(--copper))" }}
               />
             ) : null}
           </span>
         )}
       </button>
+    </div>
+  );
+}
+
+function MessageBubble({
+  msg,
+  onConfirm,
+  onSkip,
+  onClarify,
+}: {
+  msg: ChatMsg;
+  onConfirm: () => void;
+  onSkip: () => void;
+  onClarify: (opt: ClarifyOption) => void;
+}) {
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[88%] border border-ink/12 bg-wash/80 px-3 py-2 text-[0.8rem] leading-relaxed text-ink">
+          <p className="whitespace-pre-wrap">{msg.text}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const markTone =
+    msg.status === "done"
+      ? "pine"
+      : msg.status === "failed"
+        ? "rust"
+        : msg.status === "pending" || msg.status === "clarify"
+          ? "copper"
+          : "soft";
+
+  const label =
+    msg.kind === "proposal" && msg.status === "pending" && msg.proposal
+      ? proposalKindLabel(msg.proposal)
+      : msg.kind === "clarify"
+        ? "Clarificar"
+        : msg.kind === "welcome"
+          ? "Olá"
+          : msg.kind === "info"
+            ? "Resposta"
+            : "Assistente";
+
+  if (msg.kind === "proposal" && msg.proposal && msg.status === "pending") {
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-[98%] border border-ink/15 px-3.5 py-3">
+          <p className="eyebrow mb-2 flex items-center gap-1.5 text-[0.6rem]">
+            <Mark tone="copper" />
+            {label}
+          </p>
+          {msg.title ? (
+            <p className="mb-2 text-[0.75rem] leading-snug text-ink/50">{msg.title}</p>
+          ) : null}
+          <p className="font-display text-[1rem] font-semibold tracking-tight text-ink">
+            {msg.proposal.summary}
+          </p>
+          <p className="mt-1.5 text-[0.78rem] leading-relaxed text-ink/55 whitespace-pre-wrap">
+            {msg.proposal.detail}
+          </p>
+          {msg.failReason ? (
+            <p className="mt-2 text-[0.72rem] leading-snug text-rust">{msg.failReason}</p>
+          ) : null}
+          <p className="mt-3 text-[0.7rem] text-ink/40">Gravo no ledger?</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button type="button" className="btn-solid min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs" onClick={onConfirm}>
+              Confirmar
+            </button>
+            <button type="button" className="btn-ghost min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs" onClick={onSkip}>
+              Ignorar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.kind === "clarify" && msg.clarifyOptions && msg.status === "clarify") {
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-[98%] border border-ink/15 px-3.5 py-3">
+          <p className="eyebrow mb-2 flex items-center gap-1.5 text-[0.6rem]">
+            <Mark tone="copper" />
+            Clarificar
+          </p>
+          <p className="text-[0.85rem] leading-relaxed text-ink/75 whitespace-pre-wrap">{msg.text}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {msg.clarifyOptions.map((opt) => (
+              <button
+                key={opt.label}
+                type="button"
+                className="btn-ghost min-h-11 py-2.5 text-sm sm:min-h-0 sm:py-1.5 sm:text-xs"
+                onClick={() => onClarify(opt)}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="btn-ghost min-h-11 py-2.5 text-sm text-ink/45 sm:min-h-0 sm:py-1.5 sm:text-xs"
+              onClick={onSkip}
+            >
+              Ignorar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.kind === "info" || (msg.title && msg.body)) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[98%]">
+          <p className="eyebrow mb-2 flex items-center gap-1.5 text-[0.6rem]">
+            <Mark tone={markTone} />
+            {label}
+          </p>
+          {msg.title ? (
+            <p className="font-display text-[1.05rem] font-semibold tracking-tight text-ink">
+              {msg.title}
+            </p>
+          ) : null}
+          {msg.body ? (
+            <div className={msg.title ? "mt-2.5" : undefined}>
+              <BodyLines text={msg.body} />
+            </div>
+          ) : !msg.title ? (
+            <BodyLines text={msg.text} />
+          ) : null}
+          {msg.footer ? (
+            <p className="mt-3 text-[0.65rem] uppercase tracking-[0.12em] text-ink/35">
+              {msg.footer.replace(/^—\s*/, "")}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[95%]">
+        <p className="eyebrow mb-1.5 flex items-center gap-1.5 text-[0.6rem]">
+          <Mark tone={markTone} />
+          {label}
+        </p>
+        <p className="text-[0.8rem] leading-relaxed text-ink/70 whitespace-pre-wrap">{msg.text}</p>
+      </div>
     </div>
   );
 }

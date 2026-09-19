@@ -212,7 +212,7 @@ export function CompanyRecurring({
                 onChange={(e) => setRecurring(row.id, { name: e.target.value })}
               />
             </label>
-            <label className="field-label w-32">
+            <label className="field-label form-amount">
               Valor (Kz)
               <input
                 className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -224,7 +224,7 @@ export function CompanyRecurring({
                 }}
               />
             </label>
-            <label className="field-label w-36">
+            <label className="field-label form-amount">
               Natureza
               <Select
                 value={row.nature}
@@ -233,7 +233,7 @@ export function CompanyRecurring({
               />
             </label>
             {showProduct ? (
-              <label className="field-label w-36">
+              <label className="field-label form-amount">
                 Produto
                 <Select
                   value={row.product ?? ""}
@@ -285,7 +285,7 @@ export function CompanyRecurring({
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        <label className="field-label w-32">
+        <label className="field-label form-amount">
           Valor (Kz)
           <input
             className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -295,12 +295,12 @@ export function CompanyRecurring({
             onChange={(e) => setAmount(e.target.value)}
           />
         </label>
-        <label className="field-label w-36">
+        <label className="field-label form-amount">
           Natureza
           <Select value={nature} onChange={setNature} options={NATURE_OPTS} />
         </label>
         {showProduct ? (
-          <label className="field-label w-36">
+          <label className="field-label form-amount">
             Produto
             <Select value={product} onChange={setProduct} options={PRODUCT_OPTS} />
           </label>

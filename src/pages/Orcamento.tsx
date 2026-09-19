@@ -238,7 +238,7 @@ export function Orcamento() {
                   onChange={(e) => setIncomeSource(src.id, { name: e.target.value })}
                 />
               </label>
-              <label className="field-label w-36">
+              <label className="field-label form-amount">
                 Valor (Kz)
                 <input
                   className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -283,7 +283,7 @@ export function Orcamento() {
               onChange={(e) => setNewName(e.target.value)}
             />
           </label>
-          <label className="field-label w-36">
+          <label className="field-label form-amount">
             Valor (Kz)
             <input
               className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -440,7 +440,7 @@ export function Orcamento() {
                               onChange={(e) => setBudgetLine(line.id, { name: e.target.value })}
                             />
                           </label>
-                          <label className="field-label w-36">
+                          <label className="field-label form-amount">
                             Valor (Kz)
                             <input
                               className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -490,7 +490,7 @@ export function Orcamento() {
                           }
                         />
                       </label>
-                      <label className="field-label w-36">
+                      <label className="field-label form-amount">
                         Valor (Kz)
                         <input
                           className="field num text-sm font-normal normal-case tracking-normal text-ink"
@@ -611,7 +611,7 @@ export function Orcamento() {
                     ) : null}
                   </p>
                 </div>
-                <label className="field-label w-36">
+                <label className="field-label form-amount">
                   Meter (Kz)
                   <input
                     className="field num text-sm font-normal normal-case tracking-normal text-ink"

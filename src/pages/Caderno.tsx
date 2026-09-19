@@ -21,6 +21,16 @@ const VISTAS: { id: Vista; label: string }[] = [
   { id: "notas", label: "Notas" },
 ];
 
+function orderGlossarioTopics(secs: ManualSection[]): ManualSection[] {
+  const como = secs.filter((s) => s.id === "como");
+  const rest = secs.filter((s) => s.id !== "como");
+  const mapaIdx = rest.findIndex((s) => s.id === "mapa");
+  if (mapaIdx >= 0) {
+    return [...rest.slice(0, mapaIdx + 1), ...como, ...rest.slice(mapaIdx + 1)];
+  }
+  return [...como, ...rest];
+}
+
 function filterSection(section: ManualSection, q: string): ManualSection | null {
   if (!q) return section;
   const terms = section.terms.filter(
@@ -30,15 +40,52 @@ function filterSection(section: ManualSection, q: string): ManualSection | null 
   return { ...section, terms };
 }
 
+function TermBody({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const hasSteps = lines.some((l) => /^\d+[.)]\s/.test(l) || /^[·•]\s/.test(l));
+  if (!hasSteps) {
+    return <p className="glossario-term-body">{text}</p>;
+  }
+  return (
+    <div className="glossario-term-body space-y-2">
+      {lines.map((line, i) => {
+        const step = /^(\d+)[.)]\s+(.*)$/.exec(line);
+        const bullet = /^[·•]\s*(.*)$/.exec(line);
+        if (step) {
+          return (
+            <p key={i} className="glossario-step">
+              <span className="glossario-step-num">{step[1]}.</span>
+              <span className="min-w-0 flex-1">{step[2]}</span>
+            </p>
+          );
+        }
+        if (bullet) {
+          return (
+            <p key={i} className="glossario-step">
+              <span className="shrink-0 text-ink/35">·</span>
+              <span className="min-w-0 flex-1">{bullet[1]}</span>
+            </p>
+          );
+        }
+        if (!line.trim()) return <div key={i} className="h-1" />;
+        return (
+          <p key={i} className="leading-[1.65]">
+            {line}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Glossário / como fazer — tipografia folgada; passos com indentação. */
 function CompactTerms({ terms }: { terms: { t: string; d: string }[] }) {
   return (
     <ul>
       {terms.map((r) => (
-        <li key={r.t} className="ledger-row !items-start flex-col gap-1.5 py-3.5 sm:flex-row sm:gap-6">
-          <p className="shrink-0 font-display text-[0.95rem] font-semibold leading-snug tracking-tight sm:w-48">
-            {r.t}
-          </p>
-          <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-ink/60">{r.d}</p>
+        <li key={r.t} className="glossario-term">
+          <p className="glossario-term-title">{r.t}</p>
+          <TermBody text={r.d} />
         </li>
       ))}
     </ul>
@@ -58,8 +105,8 @@ export function Caderno() {
 
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
-  const glossarioFiltrado = GLOSSARIO.map((s) => filterSection(s, q)).filter(
-    (s): s is ManualSection => s !== null,
+  const glossarioFiltrado = orderGlossarioTopics(
+    GLOSSARIO.map((s) => filterSection(s, q)).filter((s): s is ManualSection => s !== null),
   );
   const activeTopic =
     glossarioFiltrado.find((s) => s.id === topicId) ?? glossarioFiltrado[0] ?? null;
@@ -109,13 +156,13 @@ export function Caderno() {
   }
 
   return (
-    <div className="page">
+    <div className="page pb-16 sm:pb-0">
       <PageHeader title="Caderno">
         Manual do painel — regras, glossário e as tuas notas.
       </PageHeader>
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Secções do caderno">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+        <div className="caderno-tabs" role="tablist" aria-label="Secções do caderno">
           {VISTAS.map((v) => {
             const on = vista === v.id;
             return (
@@ -125,7 +172,7 @@ export function Caderno() {
                 role="tab"
                 aria-selected={on}
                 onClick={() => setVista(v.id)}
-                className={`px-3 py-1.5 text-[0.72rem] uppercase tracking-[0.14em] transition-colors ${
+                className={`caderno-tab ${
                   on
                     ? "border-b-2 border-ink text-ink"
                     : "border-b-2 border-transparent text-ink/40 hover:text-ink/70"
@@ -140,29 +187,35 @@ export function Caderno() {
           })}
         </div>
         <span className="sep-line hidden min-w-[2rem] flex-1 sm:block" />
-        <button type="button" className="btn-ghost !px-3 !py-1.5 text-xs" onClick={() => downloadJson()}>
-          Exportar
-        </button>
-        <label className="btn-ghost !px-3 !py-1.5 cursor-pointer text-xs">
-          Importar
-          <input
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => {
-              onImportFile(e.target.files?.[0] ?? null);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          className="text-[0.68rem] uppercase tracking-[0.14em] text-ink/35 hover:text-ink/60"
-          onClick={() => setShowBackup((x) => !x)}
-        >
-          {showBackup ? "Ocultar backup" : "Backup"}
-        </button>
-        {importMsg ? <span className="text-xs text-pine">{importMsg}</span> : null}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            className="btn-ghost !min-h-10 !px-3 !py-2 text-xs sm:!min-h-0 sm:!py-1.5"
+            onClick={() => downloadJson()}
+          >
+            Exportar
+          </button>
+          <label className="btn-ghost !min-h-10 !px-3 !py-2 cursor-pointer text-xs sm:!min-h-0 sm:!py-1.5">
+            Importar
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                onImportFile(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="min-h-10 px-2 text-[0.68rem] uppercase tracking-[0.14em] text-ink/35 hover:text-ink/60 sm:min-h-0"
+            onClick={() => setShowBackup((x) => !x)}
+          >
+            {showBackup ? "Ocultar backup" : "Backup"}
+          </button>
+          {importMsg ? <span className="text-xs text-pine">{importMsg}</span> : null}
+        </div>
       </div>
 
       {showBackup ? (
@@ -212,7 +265,7 @@ export function Caderno() {
         <Section
           title="Glossário"
           mark="soft"
-          hint="Uma área de cada vez. Procura para cruzar todas."
+          hint="Definições e guias «como fazer». Uma área de cada vez — ou procura."
           className="!mt-10"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -222,7 +275,7 @@ export function Caderno() {
                 className="field"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="custódia, Meter, MRR…"
+                placeholder="custódia, lucro, pró-labore…"
                 autoComplete="off"
               />
             </label>
@@ -245,7 +298,7 @@ export function Caderno() {
           ) : (
             <>
               <div
-                className="mt-6 flex flex-wrap gap-x-1 gap-y-1 border-b border-ink/10 pb-px"
+                className="caderno-topic-tabs mt-6"
                 role="tablist"
                 aria-label="Áreas do glossário"
               >
@@ -258,7 +311,7 @@ export function Caderno() {
                       role="tab"
                       aria-selected={on}
                       onClick={() => setTopicId(sec.id)}
-                      className={`px-2.5 py-2 text-[0.68rem] uppercase tracking-[0.12em] transition-colors ${
+                      className={`caderno-topic-tab ${
                         on
                           ? "border-b-2 border-ink text-ink"
                           : "border-b-2 border-transparent text-ink/40 hover:text-ink/70"
@@ -303,14 +356,19 @@ export function Caderno() {
             <p className="mt-2 text-sm text-ink/45">Cada página tem um trabalho.</p>
             <ul className="mt-5">
               {MENUS.map((m) => (
-                <li key={m.to} className="ledger-row !items-start py-2.5">
+                <li
+                  key={m.to}
+                  className="flex flex-col gap-1 border-b border-ink/[0.07] py-3.5 first:pt-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:border-ink/10 sm:py-2.5"
+                >
                   <Link
                     to={m.to}
-                    className="shrink-0 border-b border-ink/25 pb-px font-display text-[0.95rem] tracking-tight hover:border-ink"
+                    className="shrink-0 border-b border-ink/25 pb-px font-display text-[1.05rem] tracking-tight hover:border-ink sm:text-[0.95rem]"
                   >
                     {m.label}
                   </Link>
-                  <span className="max-w-[16rem] text-right text-sm leading-snug text-ink/55">{m.d}</span>
+                  <p className="text-sm leading-snug text-ink/55 sm:max-w-[16rem] sm:text-right">
+                    {m.d}
+                  </p>
                 </li>
               ))}
             </ul>
