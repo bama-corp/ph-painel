@@ -33,6 +33,8 @@ export type Task = {
   timeboxMin: number;
   /** Reserva no dia: manhã / tarde / noite */
   dayBlock: TaskDayBlock;
+  /** Origem: id da rotina semanal (vazio se ad-hoc) */
+  routineId: string;
   /** ISO — merge local↔remoto */
   updatedAt: string;
 };
@@ -107,6 +109,7 @@ export const TASK_NAV: { entityId: EntityId; to: string; label: string }[] = [
 export const TASK_SYSTEM_NAV = { to: "/tarefas/sistema", label: "Sistema" } as const;
 export const TASK_CALENDAR_NAV = { to: "/tarefas/calendario", label: "Calendário" } as const;
 export const TASK_ALERTS_NAV = { to: "/tarefas/alertas", label: "Alertas" } as const;
+export const TASK_ROUTINE_NAV = { to: "/tarefas/rotina", label: "Rotina" } as const;
 
 /** path segment → entityId (minhas = pessoal) */
 export function entityFromTasksPath(segment: string | undefined): EntityId {
@@ -165,6 +168,7 @@ export function createTask(
     focusToday?: boolean;
     timeboxMin?: number;
     dayBlock?: TaskDayBlock;
+    routineId?: string;
   },
   at = new Date().toISOString().slice(0, 10),
 ): Task {
@@ -180,6 +184,7 @@ export function createTask(
     due: (draft.due ?? "").trim(),
     timeboxMin: normalizeTimebox(draft.timeboxMin ?? 0),
     dayBlock: draft.dayBlock ?? "",
+    routineId: (draft.routineId ?? "").trim(),
     updatedAt: nowIso(),
   };
 }
@@ -207,6 +212,7 @@ export function coerceTask(x: unknown): Task | null {
     due: typeof t.due === "string" ? t.due : "",
     timeboxMin: normalizeTimebox(t.timeboxMin ?? t.timebox_min),
     dayBlock: normalizeDayBlock(t.dayBlock ?? t.day_block),
+    routineId: typeof t.routineId === "string" ? t.routineId : typeof t.routine_id === "string" ? t.routine_id : "",
     updatedAt,
   };
 }
@@ -328,216 +334,24 @@ export function isTwoMinCandidate(t: Task): boolean {
   return !t.quadrant && t.timeboxMin <= 2;
 }
 
-function isoDaysFromNow(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+export function isMockTaskId(id: string) {
+  return id.startsWith("mock-");
 }
 
-/** Demo: cobre inbox GTD, Eisenhower, Kanban e «Hoje» em vários âmbitos. */
-export function buildMockTasks(): Task[] {
-  const at = new Date().toISOString().slice(0, 10);
-  const stamp = nowIso();
-  const due = (days: number) => isoDaysFromNow(days);
-
-  const row = (
-    id: string,
-    entityId: EntityId,
-    title: string,
-    patch: Partial<
-      Pick<Task, "note" | "status" | "quadrant" | "focusToday" | "due" | "timeboxMin" | "dayBlock">
-    >,
-  ): Task => ({
-    id,
-    entityId,
-    title,
-    note: patch.note ?? "",
-    status: patch.status ?? "inbox",
-    quadrant: patch.quadrant ?? "",
-    focusToday: Boolean(patch.focusToday),
-    at,
-    due: patch.due ?? "",
-    timeboxMin: patch.timeboxMin ?? 0,
-    dayBlock: patch.dayBlock ?? "",
-    updatedAt: stamp,
-  });
-
-  return [
-    // —— Minhas: GTD inbox (fora do quadro) ——
-    row("mock-p-inbox-1", "pessoal", "Ligar ao BAI sobre extrato", {
-      status: "inbox",
-      note: "Captura — se ≤2 min, faz já na Revisão.",
-      timeboxMin: 2,
-    }),
-    row("mock-p-inbox-2", "pessoal", "Ideia: rever seguro do carro", {
-      status: "inbox",
-    }),
-
-    // —— Quadro: Para fazer ——
-    row("mock-p-pf-1", "pessoal", "Enviar comprovativo ao contabilista", {
-      status: "para_fazer",
-      quadrant: "fazer",
-      focusToday: true,
-      due: due(0),
-      timeboxMin: 25,
-      dayBlock: "manha",
-    }),
-    row("mock-p-pf-2", "pessoal", "Agendar check-up dentista", {
-      status: "para_fazer",
-      quadrant: "agendar",
-      due: due(14),
-      timeboxMin: 15,
-      dayBlock: "tarde",
-    }),
-    row("mock-p-pf-3", "pessoal", "Pedir à Ana o PDF do contrato", {
-      status: "para_fazer",
-      quadrant: "delegar",
-      timeboxMin: 2,
-    }),
-    row("mock-p-pf-4", "pessoal", "Cancelar newsletter inútil", {
-      status: "para_fazer",
-      quadrant: "eliminar",
-      timeboxMin: 2,
-    }),
-    row("mock-p-pf-5", "pessoal", "Renovar carta de condução", {
-      status: "para_fazer",
-      quadrant: "agendar",
-      due: due(30),
-      dayBlock: "tarde",
-    }),
-    row("mock-p-pf-6", "pessoal", "Comprar filtro de água", {
-      status: "para_fazer",
-      quadrant: "fazer",
-      timeboxMin: 45,
-      dayBlock: "noite",
-    }),
-
-    // —— Planejar ——
-    row("mock-p-pl-1", "pessoal", "Marcar revisão semanal", {
-      status: "planejar",
-      quadrant: "agendar",
-      focusToday: true,
-      due: due(2),
-      timeboxMin: 60,
-      dayBlock: "manha",
-    }),
-    row("mock-p-pl-2", "pessoal", "Definir orçamento lazer Q4", {
-      status: "planejar",
-      quadrant: "fazer",
-      timeboxMin: 90,
-      dayBlock: "tarde",
-    }),
-
-    // —— Executar ——
-    row("mock-p-ex-1", "pessoal", "Bloquear 90 min para o painel PH", {
-      status: "executar",
-      quadrant: "fazer",
-      focusToday: true,
-      note: "Timebox 90′.",
-      timeboxMin: 90,
-      dayBlock: "manha",
-    }),
-    row("mock-p-ex-2", "pessoal", "Responder email do banco", {
-      status: "executar",
-      quadrant: "fazer",
-      timeboxMin: 15,
-    }),
-    row("mock-p-ex-3", "pessoal", "Actualizar CV / LinkedIn", {
-      status: "executar",
-      quadrant: "agendar",
-      timeboxMin: 45,
-      dayBlock: "noite",
-    }),
-
-    // —— Revisar ——
-    row("mock-p-rv-1", "pessoal", "Rever proposta do seguro", {
-      status: "revisar",
-      quadrant: "agendar",
-    }),
-
-    // —— Ajustar ——
-    row("mock-p-aj-1", "pessoal", "Corrigir extrato importado", {
-      status: "ajustar",
-      quadrant: "fazer",
-    }),
-
-    // —— Feito ——
-    row("mock-p-feita", "pessoal", "Pagar água / luz", {
-      status: "feita",
-      quadrant: "fazer",
-      due: due(-2),
-    }),
-
-    // —— Empresas (espalhadas no quadro) ——
-    row("mock-cw-1", "cw", "Fechar mês PDS", {
-      status: "executar",
-      quadrant: "fazer",
-      focusToday: true,
-      due: due(3),
-    }),
-    row("mock-cw-2", "cw", "Follow-up proposta cliente X", {
-      status: "para_fazer",
-      quadrant: "fazer",
-    }),
-    row("mock-cw-3", "cw", "Inbox: nota de reunião", {
-      status: "inbox",
-    }),
-    row("mock-rove-1", "rove", "Actualizar pipeline", {
-      status: "planejar",
-      quadrant: "agendar",
-      due: due(7),
-    }),
-    row("mock-rove-2", "rove", "Enviar proposta Rove", {
-      status: "para_fazer",
-      quadrant: "fazer",
-    }),
-    row("mock-picasso-1", "picasso", "Confirmar stock", {
-      status: "executar",
-      quadrant: "fazer",
-      focusToday: true,
-    }),
-    row("mock-picasso-2", "picasso", "Rever preços de carta", {
-      status: "revisar",
-      quadrant: "agendar",
-    }),
-    row("mock-ph-1", "ph", "Rever regras do Assistente", {
-      status: "planejar",
-      quadrant: "agendar",
-    }),
-    row("mock-ph-2", "ph", "Deploy checklist TASKS_URL", {
-      status: "feita",
-      quadrant: "fazer",
-    }),
-    row("mock-ph-3", "ph", "Ajustar copy do Hub", {
-      status: "ajustar",
-      quadrant: "fazer",
-    }),
-  ];
-}
-
-/** Garante o pacote demo (ids mock-*). Não apaga tarefas reais. */
 const MOCK_VER_KEY = "ph-tarefas-mock-ver";
-const MOCK_VER = "methods-2min-box";
 
-export function ensureSeededTasks(tasks: Task[]): { tasks: Task[]; addedIds: string[] } {
+/** Remove tarefas demo (ids mock-*) e limpa a flag de seed no browser. */
+export function stripMockTasks(tasks: Task[]): { tasks: Task[]; removedIds: string[] } {
   try {
-    if (localStorage.getItem(MOCK_VER_KEY) !== MOCK_VER) {
-      const real = tasks.filter((t) => !t.id.startsWith("mock-"));
-      const mocks = buildMockTasks();
-      localStorage.setItem(MOCK_VER_KEY, MOCK_VER);
-      return { tasks: [...mocks, ...real], addedIds: mocks.map((t) => t.id) };
-    }
+    localStorage.removeItem(MOCK_VER_KEY);
   } catch {
     /* ignore */
   }
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const addedIds: string[] = [];
-  for (const m of buildMockTasks()) {
-    if (!byId.has(m.id)) {
-      byId.set(m.id, m);
-      addedIds.push(m.id);
-    }
+  const removedIds: string[] = [];
+  const next: Task[] = [];
+  for (const t of tasks) {
+    if (isMockTaskId(t.id)) removedIds.push(t.id);
+    else next.push(t);
   }
-  if (addedIds.length === 0) return { tasks, addedIds };
-  return { tasks: Array.from(byId.values()), addedIds };
+  return { tasks: next, removedIds };
 }

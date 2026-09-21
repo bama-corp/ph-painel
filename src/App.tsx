@@ -2,11 +2,13 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Shell } from "./ui/Shell";
 import { TasksShell } from "./ui/TasksShell";
 import { PomodoroProvider } from "./domain/pomodoroStore";
+import { RoutinesProvider } from "./domain/routinesStore";
 import { TasksProvider } from "./domain/tasksStore";
 import { Hub } from "./pages/Hub";
 import { Tarefas } from "./pages/Tarefas";
 import { TarefasAlertas } from "./pages/TarefasAlertas";
 import { TarefasCalendario } from "./pages/TarefasCalendario";
+import { TarefasRotina } from "./pages/TarefasRotina";
 import { TarefasSistema } from "./pages/TarefasSistema";
 import { Eu } from "./pages/Eu";
 import { Definicao } from "./pages/Definicao";
@@ -30,9 +32,11 @@ function FinanceLayout() {
 function TasksLayout() {
   return (
     <TasksProvider>
-      <PomodoroProvider>
-        <TasksShell />
-      </PomodoroProvider>
+      <RoutinesProvider>
+        <PomodoroProvider>
+          <TasksShell />
+        </PomodoroProvider>
+      </RoutinesProvider>
     </TasksProvider>
   );
 }
@@ -45,6 +49,7 @@ export default function App() {
       <Route path="/tarefas" element={<TasksLayout />}>
         <Route index element={<Tarefas />} />
         <Route path="calendario" element={<TarefasCalendario />} />
+        <Route path="rotina" element={<TarefasRotina />} />
         <Route path="alertas" element={<TarefasAlertas />} />
         <Route path="sistema" element={<TarefasSistema />} />
         <Route path=":ambito" element={<Tarefas />} />

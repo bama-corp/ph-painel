@@ -11,13 +11,14 @@ import {
 import type { EntityId } from "./types";
 import {
   createTask,
-  ensureSeededTasks,
   executarWipCount,
   focusTodayCount,
+  isMockTaskId,
   loadTasks,
   MAX_FOCUS_TODAY,
   mergeTasks,
   saveTasks,
+  stripMockTasks,
   touchTask,
   WIP_EXECUTAR_LIMIT,
   type Task,
@@ -36,9 +37,13 @@ type TaskDraft = {
   title: string;
   note?: string;
   due?: string;
+  at?: string;
   status?: TaskStatus;
   quadrant?: TaskQuadrant;
   focusToday?: boolean;
+  timeboxMin?: number;
+  dayBlock?: Task["dayBlock"];
+  routineId?: string;
 };
 
 export type TasksSyncStatus = "local" | "loading" | "synced" | "saving" | "error" | "offline";
@@ -88,7 +93,7 @@ function saveIdSet(key: string, set: Set<string>) {
 }
 
 export function TasksProvider({ children }: { children: ReactNode }) {
-  const [tasks, setTasks] = useState<Task[]>(() => ensureSeededTasks(loadTasks()).tasks);
+  const [tasks, setTasks] = useState<Task[]>(() => stripMockTasks(loadTasks()).tasks);
   const [syncStatus, setSyncStatus] = useState<TasksSyncStatus>("loading");
   const [syncError, setSyncError] = useState("");
   const tasksRef = useRef(tasks);
@@ -108,17 +113,25 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     saveTasks(next);
   }, []);
 
-  const applyDemoSeed = useCallback((list: Task[]) => {
-    const base = list.filter((t) => !pendingDeleteRef.current.has(t.id));
-    const { tasks: next, addedIds } = ensureSeededTasks(base);
-    const fresh = addedIds.filter((id) => !pendingDeleteRef.current.has(id));
-    if (fresh.length) {
-      for (const id of fresh) dirtyRef.current.add(id);
+  /** Tira mocks da lista e marca-os para apagar na BD remota. */
+  const purgeMocks = useCallback((list: Task[]) => {
+    const { tasks: clean, removedIds } = stripMockTasks(list);
+    if (removedIds.length) {
+      for (const id of removedIds) {
+        dirtyRef.current.delete(id);
+        pendingDeleteRef.current.add(id);
+      }
+      // Também limpa qualquer mock antigo ainda na fila dirty
+      for (const id of [...dirtyRef.current]) {
+        if (isMockTaskId(id)) {
+          dirtyRef.current.delete(id);
+          pendingDeleteRef.current.add(id);
+        }
+      }
       saveIdSet(DIRTY_KEY, dirtyRef.current);
+      saveIdSet(PENDING_DELETE_KEY, pendingDeleteRef.current);
     }
-    return fresh.length
-      ? next.filter((t) => !pendingDeleteRef.current.has(t.id))
-      : base;
+    return clean.filter((t) => !pendingDeleteRef.current.has(t.id));
   }, []);
 
   const markDirty = useCallback((ids: string[]) => {
@@ -245,7 +258,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       setSyncStatus("loading");
-      const local = applyDemoSeed(loadTasks());
+      const local = purgeMocks(loadTasks());
       persistLocal(local);
 
       const r = await fetchRemoteTasks();
@@ -259,9 +272,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
           setSyncStatus("offline");
           setSyncError(r.reason);
         }
+        // Mesmo offline: limpa mocks locais e tenta apagar na BD quando voltar
+        if (pendingDeleteRef.current.size > 0) scheduleFlush();
         return;
       }
-      const merged = applyDemoSeed(mergeTasks(local, r.tasks, pendingDeleteRef.current));
+      const merged = purgeMocks(mergeTasks(local, r.tasks, pendingDeleteRef.current));
       persistLocal(merged);
       setSyncStatus("synced");
       setSyncError("");
@@ -274,7 +289,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       if (flushTimer.current) clearTimeout(flushTimer.current);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     };
-  }, [applyDemoSeed, persistLocal, scheduleFlush]);
+  }, [persistLocal, purgeMocks, scheduleFlush]);
 
   const pushNow = useCallback(async () => {
     if (missingConfig.current) return;
@@ -295,7 +310,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       if (draft.focusToday && focusTodayCount(tasks, draft.entityId) >= MAX_FOCUS_TODAY) {
         return { ok: false, reason: `No máximo ${MAX_FOCUS_TODAY} prioridades «Hoje».` };
       }
-      const created = createTask({ ...draft, title });
+      const created = createTask({ ...draft, title }, draft.at);
       persist([created, ...tasks], [created.id]);
       return { ok: true };
     },

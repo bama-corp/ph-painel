@@ -5,14 +5,18 @@ import { fileURLToPath } from "node:url";
 import {
   authorize,
   corsHeaders,
+  deleteRoutine,
   deleteTask,
   ensureSchema,
   ensureTasksSchema,
   getSnapshot,
   getSql,
   getTasksSql,
+  listRoutines,
   listTasks,
   putSnapshot,
+  upsertRoutine,
+  upsertRoutinesBatch,
   upsertTask,
   upsertTasksBatch,
 } from "./db.mjs";
@@ -189,6 +193,72 @@ async function handleTaskItem(req, res, origin, id) {
   send(res, 405, { error: "Method not allowed" }, origin);
 }
 
+async function handleRoutinesCollection(req, res, origin) {
+  if (!process.env.TASKS_DATABASE_URL) {
+    tasksDbMissing(res, origin);
+    return;
+  }
+  const sql = getTasksSql();
+  await ensureTasksSchema(sql);
+
+  if (req.method === "GET") {
+    const routines = await listRoutines(sql);
+    send(res, 200, { routines }, origin);
+    return;
+  }
+
+  if (req.method === "PUT") {
+    const body = await readBody(req);
+    const routines = body?.routines;
+    if (!Array.isArray(routines)) {
+      send(res, 400, { error: "Payload inválido: falta routines[]." }, origin);
+      return;
+    }
+    try {
+      const saved = await upsertRoutinesBatch(sql, routines);
+      send(res, 200, { ok: true, routines: saved }, origin);
+    } catch (e) {
+      send(res, 400, { error: e.message || "Rotinas inválidas." }, origin);
+    }
+    return;
+  }
+
+  send(res, 405, { error: "Method not allowed" }, origin);
+}
+
+async function handleRoutineItem(req, res, origin, id) {
+  if (!process.env.TASKS_DATABASE_URL) {
+    tasksDbMissing(res, origin);
+    return;
+  }
+  const sql = getTasksSql();
+  await ensureTasksSchema(sql);
+
+  if (req.method === "PUT") {
+    const body = await readBody(req);
+    const payload = { ...(body?.routine ?? body ?? {}), id };
+    try {
+      const routine = await upsertRoutine(sql, payload);
+      send(res, 200, { ok: true, routine }, origin);
+    } catch (e) {
+      send(res, 400, { error: e.message || "Rotina inválida." }, origin);
+    }
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    const r = await deleteRoutine(sql, id);
+    if (!r.deleted) {
+      send(res, 404, { error: "Rotina não encontrada.", id }, origin);
+      return;
+    }
+    send(res, 200, { ok: true, id }, origin);
+    return;
+  }
+
+  send(res, 405, { error: "Method not allowed" }, origin);
+}
+
 async function handleNotifyTasks(req, res, origin, url) {
   const auth = authorizeNotify(req);
   if (!auth.ok) {
@@ -297,6 +367,15 @@ const server = createServer(async (req, res) => {
       await handleTaskItem(req, res, origin, decodeURIComponent(one[1]));
       return;
     }
+    if (url.pathname === "/api/routines") {
+      await handleRoutinesCollection(req, res, origin);
+      return;
+    }
+    const oneRoutine = url.pathname.match(/^\/api\/routines\/([^/]+)$/);
+    if (oneRoutine) {
+      await handleRoutineItem(req, res, origin, decodeURIComponent(oneRoutine[1]));
+      return;
+    }
     send(res, 404, { error: "Not found" }, origin);
   } catch (e) {
     console.error(e);
@@ -316,6 +395,6 @@ server.on("error", (err) => {
 server.listen(PORT, () => {
   const tasks = process.env.TASKS_DATABASE_URL ? "tasks OK" : "tasks SEM TASKS_DATABASE_URL";
   console.log(
-    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/notify/tasks (${tasks})`,
+    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/notify/tasks (${tasks})`,
   );
 });

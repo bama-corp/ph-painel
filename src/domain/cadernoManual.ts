@@ -764,7 +764,7 @@ export function findManualDefinition(topic: string): ManualTerm | null {
   let best: { term: ManualTerm; score: number } | null = null;
   for (const term of allManualTerms()) {
     const title = foldManual(term.t);
-    const titleWords = title.match(/[a-z0-9]+/g) ?? [];
+    const titleWords: string[] = title.match(/[a-z0-9]+/g) ?? [];
     const titleCompact = title.replace(/[\s\-]+/g, "");
     let score = 0;
 

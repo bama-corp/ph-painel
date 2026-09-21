@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ENTITY } from "../domain/labels";
-import { openCount, TASK_ALERTS_NAV, TASK_CALENDAR_NAV, TASK_NAV, TASK_SYSTEM_NAV } from "../domain/tasks";
+import { openCount, TASK_ALERTS_NAV, TASK_CALENDAR_NAV, TASK_NAV, TASK_ROUTINE_NAV, TASK_SYSTEM_NAV } from "../domain/tasks";
 import { useTasks } from "../domain/tasksStore";
 import { FloatingPomodoro } from "./FloatingPomodoro";
 
@@ -81,6 +81,14 @@ export function TasksShell({ children }: { children?: ReactNode }) {
               }
             >
               {TASK_CALENDAR_NAV.label}
+            </NavLink>
+            <NavLink
+              to={TASK_ROUTINE_NAV.to}
+              className={({ isActive }) =>
+                isActive ? "nav-link nav-link-active" : "nav-link"
+              }
+            >
+              {TASK_ROUTINE_NAV.label}
             </NavLink>
             <NavLink
               to={TASK_ALERTS_NAV.to}

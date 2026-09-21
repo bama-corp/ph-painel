@@ -5,7 +5,6 @@ import { formatDatePt } from "../domain/money";
 import {
   DAY_BLOCK_LABEL,
   NEXT_STATUS,
-  QUADRANT_LABEL,
   STATUS_LABEL,
   TIMEBOX_PRESETS,
   type Task,
