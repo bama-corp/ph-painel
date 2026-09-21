@@ -44,6 +44,7 @@ function checkPg(name) {
 
 checkPg("DATABASE_URL");
 checkPg("DIRECT_URL");
+checkPg("TASKS_DATABASE_URL");
 
 const pluralUrl = env.VITE_PLURAL_API_URL || "";
 report.push({

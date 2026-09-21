@@ -35,7 +35,7 @@ function SyncBadge() {
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { state, setMonth, reset } = useStore();
-  const home = pathname === "/";
+  const onEu = pathname === "/eu";
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -48,12 +48,11 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="px-4 pt-5 sm:px-12 sm:pt-8 lg:px-16">
         <div className="mx-auto max-w-7xl">
           <div className="flex items-end justify-between gap-4">
-            {home ? (
-              <span className="eyebrow">Painel financeiro</span>
-            ) : (
+            <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-2">
               <NavLink
                 to="/"
                 className="brand inline-flex items-end gap-0.5 text-[1.85rem] text-ink transition-opacity hover:opacity-70 sm:-ml-0.5 sm:gap-1 sm:text-[2.35rem]"
+                title="Voltar ao hub"
               >
                 <span>PH</span>
                 <img
@@ -65,7 +64,8 @@ export function Shell({ children }: { children: ReactNode }) {
                   decoding="async"
                 />
               </NavLink>
-            )}
+              <span className="eyebrow mb-1.5 hidden sm:inline">Finanças</span>
+            </div>
             <label className="flex shrink-0 items-center gap-2 text-[0.72rem] text-ink/40 sm:hidden">
               <span className="uppercase tracking-[0.16em]">Mês</span>
               <input
@@ -86,7 +86,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <NavLink
                 key={l.to}
                 to={l.to}
-                end={l.to === "/"}
+                end={l.to === "/eu"}
                 className={({ isActive }) => (isActive ? "nav-link nav-link-active" : "nav-link")}
               >
                 {l.label}
@@ -99,7 +99,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="mark hidden sm:inline-block" aria-hidden />
           <span className="sep-line hidden min-w-[3rem] flex-1 sm:block" />
           <p className="w-full text-[0.75rem] leading-snug text-ink/45 sm:w-auto sm:text-[0.78rem]">
-            {home
+            {onEu
               ? "Pessoal + quatro empresas. Um painel."
               : `Cinco caixas · ${monthLabel(state.month)}`}
           </p>

@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Mark } from "./Page";
+import { Mark, type MarkTone } from "./Page";
 
 export type SelectOption<T extends string = string> = {
   value: T;
   label: string;
+  /** Mark na opção (ex. Eisenhower) */
+  tone?: MarkTone;
 };
 
 type SelectProps<T extends string> = {
@@ -13,8 +15,11 @@ type SelectProps<T extends string> = {
   className?: string;
   /** Compacto — ex. filtro inline na barra de ferramentas */
   inline?: boolean;
+  /** Menu abre para a esquerda (filas com controlos à direita) */
+  menuAlign?: "left" | "right";
   disabled?: boolean;
   placeholder?: string;
+  "aria-label"?: string;
 };
 
 export function Select<T extends string>({
@@ -23,8 +28,10 @@ export function Select<T extends string>({
   options,
   className = "",
   inline = false,
+  menuAlign = "left",
   disabled = false,
   placeholder = "Escolher…",
+  "aria-label": ariaLabel,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -87,6 +94,8 @@ export function Select<T extends string>({
     }
   }
 
+  const triggerTone = selected?.tone;
+
   return (
     <div
       ref={rootRef}
@@ -97,6 +106,7 @@ export function Select<T extends string>({
         type="button"
         id={id}
         disabled={disabled}
+        aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
@@ -104,7 +114,12 @@ export function Select<T extends string>({
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onKeyDown}
       >
-        <span className="select-value">{selected?.label ?? placeholder}</span>
+        {inline && triggerTone ? <Mark tone={triggerTone} /> : null}
+        <span
+          className={`select-value ${!selected || selected.value === "" ? "select-value-empty" : ""}`}
+        >
+          {selected?.label ?? placeholder}
+        </span>
         <span className="select-chevron" aria-hidden />
       </button>
 
@@ -114,13 +129,14 @@ export function Select<T extends string>({
           id={listId}
           role="listbox"
           aria-labelledby={id}
-          className="select-menu"
+          className={`select-menu ${menuAlign === "right" ? "select-menu-right" : ""}`}
         >
           {options.map((opt, i) => {
             const active = opt.value === value;
             const hot = i === highlight;
+            const tone = opt.tone ?? (active ? "pine" : "soft");
             return (
-              <li key={opt.value} role="presentation">
+              <li key={opt.value || `empty-${i}`} role="presentation">
                 <button
                   type="button"
                   role="option"
@@ -129,7 +145,7 @@ export function Select<T extends string>({
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => pick(i)}
                 >
-                  <Mark tone={active ? "pine" : "soft"} />
+                  <Mark tone={tone} />
                   <span className="min-w-0 flex-1 truncate text-left">{opt.label}</span>
                 </button>
               </li>

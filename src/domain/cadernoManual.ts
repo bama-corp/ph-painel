@@ -86,7 +86,7 @@ export const RITMO: ManualTerm[] = [
 ];
 
 export const MENUS: { to: string; label: string; d: string }[] = [
-  { to: "/", label: "Eu", d: "Visão geral. De quem é o dinheiro, alertas, património e fluxo." },
+  { to: "/eu", label: "Eu", d: "Visão geral. De quem é o dinheiro, alertas, património e fluxo." },
   { to: "/definicao", label: "Definição", d: "Regras de vida financeira e métodos de divisão das %." },
   { to: "/orcamento", label: "Orçamento", d: "Fontes, % dos bolsos, inventário (renda, luz…) e Meter." },
   { to: "/contas", label: "Contas", d: "Bancos, teu vs custódia, a receber, a pagar, Devolver." },
