@@ -46,16 +46,17 @@ checkPg("DATABASE_URL");
 checkPg("DIRECT_URL");
 checkPg("TASKS_DATABASE_URL");
 
-const pluralUrl = env.VITE_PLURAL_API_URL || "";
+const pluralUrl = env.PLURAL_API_URL || env.VITE_PLURAL_API_URL || "";
+const pluralKey = env.PLURAL_API_KEY || env.VITE_PLURAL_API_KEY || "";
 report.push({
-  name: "VITE_PLURAL_API_URL",
+  name: "PLURAL_API_URL",
   ok: Boolean(pluralUrl),
   value: pluralUrl || "(vazio)",
 });
 report.push({
-  name: "VITE_PLURAL_API_KEY",
-  ok: Boolean(env.VITE_PLURAL_API_KEY),
-  len: (env.VITE_PLURAL_API_KEY || "").length,
+  name: "PLURAL_API_KEY",
+  ok: Boolean(pluralKey),
+  len: pluralKey.length,
 });
 report.push({
   name: "DATABASE_eq_DIRECT",

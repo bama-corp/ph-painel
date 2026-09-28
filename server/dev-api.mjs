@@ -27,6 +27,7 @@ import {
   notifyChannelsConfigured,
   sendNotify,
 } from "./notify.mjs";
+import { fetchFromPlural, pluralLinked, authorizePluralHook, syncPluralIntoNeon } from "./plural-bridge.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -387,6 +388,67 @@ const server = createServer(async (req, res) => {
       await handleRoutineItem(req, res, origin, decodeURIComponent(oneRoutine[1]));
       return;
     }
+    if (url.pathname === "/api/plural/status" && req.method === "GET") {
+      send(res, 200, { linked: pluralLinked() }, origin);
+      return;
+    }
+    if (url.pathname === "/api/plural/summary" && req.method === "GET") {
+      if (!pluralLinked()) {
+        send(
+          res,
+          503,
+          { error: "PLURAL_API_URL / PLURAL_API_KEY em falta no servidor PH." },
+          origin,
+        );
+        return;
+      }
+      const r = await fetchFromPlural("/api/ph/summary");
+      if (!r.ok) {
+        send(res, r.status, { error: r.error }, origin);
+        return;
+      }
+      send(res, 200, r.body, origin);
+      return;
+    }
+    if (url.pathname === "/api/plural/hook" && req.method === "POST") {
+      const auth = authorizePluralHook(req);
+      if (!auth.ok) {
+        send(res, auth.status, { error: auth.error }, origin);
+        return;
+      }
+      const body = await readBody(req).catch(() => ({}));
+      const result = await syncPluralIntoNeon({
+        event: body?.event || "sync",
+        clientId: body?.clientId,
+        clientName: body?.clientName,
+        amount: body?.amount,
+        at: body?.at,
+      });
+      if (!result.ok) {
+        send(res, result.status || 502, { error: result.reason }, origin);
+        return;
+      }
+      send(res, 200, result, origin);
+      return;
+    }
+    if (url.pathname === "/api/plural/sync" && (req.method === "GET" || req.method === "POST")) {
+      if (!pluralLinked()) {
+        send(
+          res,
+          503,
+          { error: "PLURAL_API_URL / PLURAL_API_KEY em falta no servidor PH." },
+          origin,
+        );
+        return;
+      }
+      const result = await syncPluralIntoNeon({ event: "cron" });
+      if (!result.ok) {
+        send(res, result.status || 502, { error: result.reason }, origin);
+        return;
+      }
+      send(res, 200, result, origin);
+      return;
+    }
     send(res, 404, { error: "Not found" }, origin);
   } catch (e) {
     console.error(e);
@@ -405,7 +467,8 @@ server.on("error", (err) => {
 
 server.listen(PORT, () => {
   const tasks = process.env.TASKS_DATABASE_URL ? "tasks OK" : "tasks SEM TASKS_DATABASE_URL";
+  const plural = pluralLinked() ? "plural OK" : "plural SEM PLURAL_API_*";
   console.log(
-    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/notify/tasks (${tasks})`,
+    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/plural · /api/notify/tasks (${tasks}; ${plural})`,
   );
 });

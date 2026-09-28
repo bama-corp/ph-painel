@@ -41,7 +41,7 @@ export const ENTITY: Record<EntityId, EntityMeta> = {
     path: "/plural",
     tone: "moss",
     rail: "rgb(var(--moss))",
-    lede: "Recorrência. Cliente não é pagamento. A faturação declarada só conta quando o cliente paga.",
+    lede: "Operação no Plural · dinheiro aqui. Cliente activo ≠ pagamento na caixa até registares.",
   },
   picasso: {
     id: "picasso",

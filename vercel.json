@@ -7,6 +7,10 @@
     {
       "path": "/api/notify/tasks",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/plural/sync",
+      "schedule": "15 8 * * *"
     }
   ]
 }

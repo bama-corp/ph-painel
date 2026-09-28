@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { liveRoveStatus, roveCounts, roveMrr, unitEconomics } from "../domain/engine";
 import { ENTITY } from "../domain/labels";
 import { formatDatePt } from "../domain/money";
+import { pluralClientUrl } from "../domain/pluralRemote";
 import { useStore } from "../domain/store";
 import type { RoveProduct, RoveStatus } from "../domain/types";
 import { CompanyAccounts, CompanyOutlook, CompanyRecentMoves, CompanyRecurring } from "../ui/CompanyOps";
@@ -11,6 +12,9 @@ import { Mark, PageHeader, Section, Stat, TotalRow } from "../ui/Page";
 import { Select } from "../ui/Select";
 
 const meta = ENTITY.rove;
+
+/** Refresh automático enquanto a página Plural está aberta (minutos). */
+const PLURAL_AUTO_SYNC_MS = 5 * 60 * 1000;
 
 const PLAN_OPTIONS = [
   { value: "netflix" as const, label: "Netflix" },
@@ -26,18 +30,73 @@ const ST: { id: RoveStatus; label: string }[] = [
   { id: "potencial", label: "Potencial" },
 ];
 
+function formatSyncAt(iso: string | null) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString("pt-PT", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function Rove() {
-  const { state, setClient } = useStore();
+  const { state, setClient, pluralSync, syncPlural } = useStore();
+  const linked = pluralSync.linked || pluralSync.status === "ok" || pluralSync.status === "syncing";
   const counts = roveCounts(state);
   const mrr = roveMrr(state);
   const netflix = unitEconomics(state, "netflix");
   const iptv = unitEconomics(state, "iptv");
+  const syncLabel = formatSyncAt(pluralSync.at);
+
+  useEffect(() => {
+    if (!linked) return;
+    const id = window.setInterval(() => {
+      void syncPlural();
+    }, PLURAL_AUTO_SYNC_MS);
+    return () => window.clearInterval(id);
+  }, [linked]); // syncPlural estável o suficiente; evita recriar o timer a cada render
 
   return (
     <div className="page">
       <PageHeader title={meta.short} mark={meta.tone}>
         {meta.lede}
       </PageHeader>
+
+      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        {linked ? (
+          <span className="text-ink/55">
+            Fonte: <span className="text-ink">Plural</span>
+            <span className="text-ink/40"> · operação no Plural · dinheiro aqui</span>
+            {syncLabel ? <span className="text-ink/40"> · sync {syncLabel}</span> : null}
+            {pluralSync.status === "syncing" ? (
+              <span className="text-ink/40"> · a sincronizar…</span>
+            ) : null}
+            {pluralSync.status === "error" && pluralSync.error ? (
+              <span className="text-rust"> · {pluralSync.error}</span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="text-ink/40">
+            Sem ponte Plural — define PLURAL_API_URL e PLURAL_API_KEY no servidor (.env).
+          </span>
+        )}
+        {linked || pluralSync.status === "error" ? (
+          <button
+            type="button"
+            className="btn-ghost !min-h-9 py-1.5 text-sm"
+            disabled={pluralSync.status === "syncing"}
+            onClick={() => void syncPlural()}
+          >
+            Sincronizar
+          </button>
+        ) : null}
+      </div>
+
       <div className="mt-8">
         <MoveForm defaultEntity="rove" />
       </div>
@@ -70,13 +129,19 @@ export function Rove() {
 
       <CompanyRecurring entity="rove" showProduct />
 
-      <Section title="Clientes" mark={meta.tone}>
+      <Section
+        title="Clientes"
+        mark={meta.tone}
+        hint={linked ? "Só leitura — edita no painel Plural e sincroniza." : undefined}
+      >
         <div className="table-scroll">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-ink/15">
-                {["Cliente", "Plano", "Preço", "Vencimento", "Estado"].map((h) => (
-                  <th key={h} className="eyebrow py-3 pr-3 font-medium">
+                {["Cliente", "Plano", "Preço", "Vencimento", "Estado", linked ? "" : null]
+                  .filter((h) => h !== null)
+                  .map((h) => (
+                  <th key={h || "link"} className="eyebrow py-3 pr-3 font-medium">
                     {h}
                   </th>
                 ))}
@@ -85,14 +150,31 @@ export function Rove() {
             <tbody>
               {state.roveClients.map((c) => {
                 const live = liveRoveStatus(c, state.asOf);
+                const pluralHref = linked ? pluralClientUrl(c.id) : null;
                 return (
                   <tr key={c.id} className="border-b border-ink/[0.06]">
                     <td className="py-3 pr-3">
-                      <input
-                        className="w-full bg-transparent outline-none focus:border-b focus:border-ink"
-                        defaultValue={c.name}
-                        onBlur={(e) => setClient(c.id, { name: e.target.value })}
-                      />
+                      {linked ? (
+                        pluralHref ? (
+                          <a
+                            href={pluralHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-ink underline-offset-2 hover:underline"
+                            title="Abrir no Plural"
+                          >
+                            {c.name}
+                          </a>
+                        ) : (
+                          <span className="text-ink/80">{c.name}</span>
+                        )
+                      ) : (
+                        <input
+                          className="w-full bg-transparent outline-none focus:border-b focus:border-ink"
+                          defaultValue={c.name}
+                          onBlur={(e) => setClient(c.id, { name: e.target.value })}
+                        />
+                      )}
                     </td>
                     <td className="py-3 pr-3 text-ink/55">{c.product}</td>
                     <td className="py-3 pr-3">
@@ -104,13 +186,27 @@ export function Rove() {
                     <td className="py-3 pr-3">
                       <Status live={live} stored={c.status} />
                     </td>
+                    {linked ? (
+                      <td className="py-3 pr-3 text-right">
+                        {pluralHref ? (
+                          <a
+                            href={pluralHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-ink/45 hover:text-ink"
+                          >
+                            Plural ↗
+                          </a>
+                        ) : null}
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <AddClient />
+        {!linked ? <AddClient /> : null}
       </Section>
 
       <CompanyAccounts entity="rove" />

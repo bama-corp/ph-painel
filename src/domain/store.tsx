@@ -15,6 +15,12 @@ import {
 } from "./engine";
 import { downloadStateJson, exportStateJson, importStateJson, loadState, STORAGE_KEY } from "./persist";
 import { fetchRemoteState, pushRemoteState } from "./remote";
+import {
+  applyPluralSummary,
+  fetchPluralStatus,
+  fetchPluralSummary,
+  requestPluralServerSync,
+} from "./pluralRemote";
 import { seedState } from "./seed";
 import {
   applySplitMethodRules,
@@ -53,11 +59,20 @@ function isCostNature(v: string): v is CostNature {
   return (COST_NATURES as string[]).includes(v);
 }
 
+type PluralSyncInfo = {
+  status: "idle" | "syncing" | "ok" | "error" | "off";
+  at: string | null;
+  error: string | null;
+  linked: boolean;
+};
+
 type Store = {
   state: AppState;
   ready: boolean;
   syncStatus: "idle" | "loading" | "saving" | "synced" | "offline" | "error";
   syncError: string | null;
+  pluralSync: PluralSyncInfo;
+  syncPlural: () => Promise<{ ok: true } | { ok: false; reason: string }>;
   addMovement: (m: Omit<Movement, "id">) => MovementResult;
   /** Apaga um movimento (correcção). Os saldos recalculam-se a partir do ledger. */
   removeMovement: (id: string) => { ok: true } | { ok: false; reason: string };
@@ -112,8 +127,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Store["syncStatus"]>("loading");
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [pluralSync, setPluralSync] = useState<PluralSyncInfo>({
+    status: "idle",
+    at: null,
+    error: null,
+    linked: false,
+  });
   const skipPush = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function runPluralSync(): Promise<{ ok: true } | { ok: false; reason: string }> {
+    setPluralSync((p) => ({ ...p, status: "syncing", error: null }));
+
+    // Preferir sync no servidor (Neon) para não apagar receitas do webhook.
+    const server = await requestPluralServerSync();
+    if (server.ok) {
+      const remote = await fetchRemoteState();
+      if (remote.ok) {
+        skipPush.current = true;
+        setState(remote.state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.state));
+        const at = new Date().toISOString();
+        setPluralSync({ status: "ok", at, error: null, linked: true });
+        return { ok: true };
+      }
+    } else if (server.notConfigured) {
+      setPluralSync({ status: "off", at: null, error: null, linked: false });
+      return { ok: false, reason: server.reason };
+    }
+
+    // Fallback: apply no browser (dev antigo / sync endpoint indisponível)
+    const r = await fetchPluralSummary();
+    if (!r.ok) {
+      if (r.notConfigured) {
+        setPluralSync({ status: "off", at: null, error: null, linked: false });
+      } else {
+        setPluralSync({
+          status: "error",
+          at: null,
+          error: r.reason,
+          linked: true,
+        });
+      }
+      return { ok: false, reason: r.reason };
+    }
+    setState((s) => applyPluralSummary(s, r.summary));
+    const at = new Date().toISOString();
+    setPluralSync({ status: "ok", at, error: null, linked: true });
+    return { ok: true };
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +201,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       skipPush.current = true;
       setReady(true);
+      if (!cancelled) {
+        const linked = await fetchPluralStatus();
+        if (cancelled) return;
+        if (linked) {
+          setPluralSync((p) => ({ ...p, linked: true, status: "idle" }));
+          void runPluralSync();
+        } else {
+          setPluralSync({ status: "off", at: null, error: null, linked: false });
+        }
+      }
     })();
     return () => {
       cancelled = true;
@@ -186,6 +258,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ready,
     syncStatus,
     syncError,
+    pluralSync,
+    syncPlural: runPluralSync,
     addMovement: (m) => {
       let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {

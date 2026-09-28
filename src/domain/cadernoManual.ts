@@ -615,8 +615,12 @@ export const GLOSSARIO: ManualSection[] = [
   {
     id: "plural",
     title: "Plural (clientes e MRR)",
-    hint: "Recorrência. Cliente não é pagamento.",
+    hint: "Operação no Plural · dinheiro no PH. Cliente ≠ pagamento.",
     terms: [
+      {
+        t: "Papéis dos painéis",
+        d: "Plural = operação da recorrência (clientes, planos, vencimentos, estados).\nPH = dinheiro e decisão (caixa, movimentos, lucro, equity, alertas).\nClientes/MRR: fonte de verdade no Plural; o PH só espelha (leitura).\nCaixa/ledger: só no PH. «Marcar pago» no Plural não lança Kz aqui — regista a receita no Registo.",
+      },
       {
         t: "Cliente",
         d: "Assinante Netflix/IPTV. Ter cliente não é receita até pagar.",
