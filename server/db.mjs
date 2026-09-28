@@ -52,6 +52,7 @@ export async function ensureTasksSchema(sql) {
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS timebox_min INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS day_block TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS routine_id TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS subtasks JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`CREATE INDEX IF NOT EXISTS ph_tasks_entity_idx ON ph_tasks (entity_id)`;
 
   await sql`
@@ -103,6 +104,7 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
   if (!Number.isFinite(timeboxMin) || timeboxMin < 0) timeboxMin = 0;
   timeboxMin = Math.min(480, Math.round(timeboxMin));
   const routineId = String(raw.routineId ?? raw.routine_id ?? "").trim();
+  const subtasks = normalizeSubtasksInput(raw.subtasks);
   return {
     ok: true,
     task: {
@@ -118,14 +120,29 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
       timeboxMin,
       dayBlock,
       routineId,
+      subtasks,
     },
   };
+}
+
+function normalizeSubtasksInput(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const title = String(item.title ?? "").trim();
+    if (!title) continue;
+    const id = String(item.id ?? "").trim() || `s-${out.length}`;
+    out.push({ id, title, done: Boolean(item.done) });
+    if (out.length >= 40) break;
+  }
+  return out;
 }
 
 export async function listTasks(sql) {
   const rows = await sql`
     SELECT id, entity_id, title, note, status, quadrant, focus_today, at, due,
-           timebox_min, day_block, routine_id, updated_at
+           timebox_min, day_block, routine_id, subtasks, updated_at
     FROM ph_tasks
     ORDER BY at DESC, id DESC
   `;
@@ -146,6 +163,7 @@ function rowToTask(row) {
     timeboxMin: Number(row.timebox_min ?? 0),
     dayBlock: row.day_block ?? "",
     routineId: row.routine_id ?? "",
+    subtasks: normalizeSubtasksInput(row.subtasks),
     updatedAt:
       row.updated_at instanceof Date
         ? row.updated_at.toISOString()
@@ -157,10 +175,11 @@ export async function upsertTask(sql, raw) {
   const v = validateTaskInput(raw, { requireId: true });
   if (!v.ok) throw new Error(v.error);
   const t = v.task;
+  const subtasksJson = JSON.stringify(t.subtasks ?? []);
   const rows = await sql`
     INSERT INTO ph_tasks (
       id, entity_id, title, note, status, quadrant, focus_today, at, due,
-      timebox_min, day_block, routine_id, updated_at
+      timebox_min, day_block, routine_id, subtasks, updated_at
     ) VALUES (
       ${t.id},
       ${t.entityId},
@@ -174,6 +193,7 @@ export async function upsertTask(sql, raw) {
       ${t.timeboxMin},
       ${t.dayBlock},
       ${t.routineId},
+      ${subtasksJson}::jsonb,
       now()
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -188,9 +208,10 @@ export async function upsertTask(sql, raw) {
       timebox_min = EXCLUDED.timebox_min,
       day_block = EXCLUDED.day_block,
       routine_id = EXCLUDED.routine_id,
+      subtasks = EXCLUDED.subtasks,
       updated_at = now()
     RETURNING id, entity_id, title, note, status, quadrant, focus_today, at, due,
-              timebox_min, day_block, routine_id, updated_at
+              timebox_min, day_block, routine_id, subtasks, updated_at
   `;
   return rowToTask(rows[0]);
 }

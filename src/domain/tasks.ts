@@ -18,6 +18,12 @@ export type TaskQuadrant = "fazer" | "agendar" | "delegar" | "eliminar" | "";
 /** Bloco do dia (time blocking leve) */
 export type TaskDayBlock = "" | "manha" | "tarde" | "noite";
 
+export type TaskSubtask = {
+  id: string;
+  title: string;
+  done: boolean;
+};
+
 export type Task = {
   id: string;
   entityId: EntityId;
@@ -35,6 +41,8 @@ export type Task = {
   dayBlock: TaskDayBlock;
   /** Origem: id da rotina semanal (vazio se ad-hoc) */
   routineId: string;
+  /** Checklist 1 nível */
+  subtasks: TaskSubtask[];
   /** ISO — merge local↔remoto */
   updatedAt: string;
 };
@@ -127,6 +135,38 @@ function uid() {
   return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function subUid() {
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function createSubtask(title: string, done = false): TaskSubtask {
+  return { id: subUid(), title: title.trim(), done };
+}
+
+export function normalizeSubtasks(raw: unknown): TaskSubtask[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaskSubtask[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const s = item as Record<string, unknown>;
+    const title = typeof s.title === "string" ? s.title.trim() : "";
+    if (!title) continue;
+    const id =
+      typeof s.id === "string" && s.id.trim()
+        ? s.id.trim()
+        : `s-${out.length}-${Math.random().toString(36).slice(2, 7)}`;
+    out.push({ id, title, done: Boolean(s.done) });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
+export function subtasksProgress(subtasks: TaskSubtask[]): { done: number; total: number } {
+  const total = subtasks.length;
+  const done = subtasks.filter((s) => s.done).length;
+  return { done, total };
+}
+
 function normalizeStatus(raw: unknown): TaskStatus {
   if (raw === "aberta" || raw === "a_fazer") return "para_fazer";
   if (raw === "em_curso") return "executar";
@@ -169,6 +209,7 @@ export function createTask(
     timeboxMin?: number;
     dayBlock?: TaskDayBlock;
     routineId?: string;
+    subtasks?: TaskSubtask[];
   },
   at = new Date().toISOString().slice(0, 10),
 ): Task {
@@ -185,6 +226,7 @@ export function createTask(
     timeboxMin: normalizeTimebox(draft.timeboxMin ?? 0),
     dayBlock: draft.dayBlock ?? "",
     routineId: (draft.routineId ?? "").trim(),
+    subtasks: normalizeSubtasks(draft.subtasks ?? []),
     updatedAt: nowIso(),
   };
 }
@@ -213,6 +255,7 @@ export function coerceTask(x: unknown): Task | null {
     timeboxMin: normalizeTimebox(t.timeboxMin ?? t.timebox_min),
     dayBlock: normalizeDayBlock(t.dayBlock ?? t.day_block),
     routineId: typeof t.routineId === "string" ? t.routineId : typeof t.routine_id === "string" ? t.routine_id : "",
+    subtasks: normalizeSubtasks(t.subtasks),
     updatedAt,
   };
 }

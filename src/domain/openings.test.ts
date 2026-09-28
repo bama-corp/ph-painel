@@ -22,13 +22,15 @@ const receitaBai: Movement = {
 };
 
 describe("Passo 2 — openings e ajustes", () => {
-  it("seed: openings editáveis (só stub world→world na PDS, sem tocar contas)", () => {
+  it("seed: openings editáveis quando teu ≥ custódia na conta", () => {
     const s = seedState();
     expect(canEditAccountOpening(s, "bai")).toBe(true);
     expect(canEditAccountOpening(s, "cw-caixa")).toBe(true);
+    // ATLANTICO tem custódia Lenu/Eduardo > teu → bloqueado
+    expect(canEditAccountOpening(s, "atlantico")).toBe(false);
   });
 
-  it("opening pode ser alterado antes de movimentos na conta", () => {
+  it("opening pode ser alterado quando teu ≥ custódia", () => {
     const s = seedState();
     const r = applyAccountOpening(s, "bai", 200_000);
     expect(r.ok).toBe(true);
@@ -37,17 +39,25 @@ describe("Passo 2 — openings e ajustes", () => {
     expect(liquidityOf(r.state, "bai")).toBe(200_000);
   });
 
-  it("opening não é silenciosamente alterado após movimentos na conta", () => {
+  it("opening continua editável após movimentos se teu ≥ custódia", () => {
     const s = { ...seedState(), movements: [receitaBai, ...seedState().movements] };
     const before = s.accounts.find((a) => a.id === "bai")!.opening;
     const live = liquidityOf(s, "bai");
     expect(live).toBe(before + 5000);
 
     const r = applyAccountOpening(s, "bai", 999);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.accounts.find((a) => a.id === "bai")?.opening).toBe(999);
+    expect(liquidityOf(r.state, "bai")).toBe(999 + 5000);
+  });
+
+  it("opening bloqueado quando teu < custódia na conta", () => {
+    const s = seedState();
+    const before = s.accounts.find((a) => a.id === "atlantico")!.opening;
+    const r = applyAccountOpening(s, "atlantico", 1);
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.state.accounts.find((a) => a.id === "bai")?.opening).toBe(before);
-    expect(liquidityOf(r.state, "bai")).toBe(live);
+    expect(r.state.accounts.find((a) => a.id === "atlantico")?.opening).toBe(before);
   });
 
   it("ajuste auditado corrige saldo sem mudar opening", () => {

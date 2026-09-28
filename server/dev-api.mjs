@@ -23,6 +23,7 @@ import {
 import {
   authorizeNotify,
   buildTasksDigest,
+  buildTestNotify,
   notifyChannelsConfigured,
   sendNotify,
 } from "./notify.mjs";
@@ -285,12 +286,17 @@ async function handleNotifyTasks(req, res, origin, url) {
   const testOnly = url.searchParams.get("test") === "1";
 
   if (testOnly) {
-    const text = `PH · teste ${new Date().toISOString().slice(0, 19)}Z\nSe leste isto no telemóvel, está ok.`;
+    const testMsg = buildTestNotify();
     if (dry) {
-      send(res, 200, { ok: true, dry: true, text, channels }, origin);
+      send(res, 200, { ok: true, dry: true, text: testMsg.text, notify: testMsg, channels }, origin);
       return;
     }
-    const sent = await sendNotify(text);
+    const sent = await sendNotify(testMsg.text, {
+      title: testMsg.title,
+      priority: testMsg.priority,
+      tags: testMsg.tags,
+      click: testMsg.click,
+    });
     if (!sent.ok) {
       send(res, 502, { error: sent.reason, channels }, origin);
       return;
@@ -314,7 +320,12 @@ async function handleNotifyTasks(req, res, origin, url) {
     return;
   }
 
-  const sent = await sendNotify(digest.text);
+  const sent = await sendNotify(digest.text, {
+    title: digest.title,
+    priority: digest.priority,
+    tags: digest.tags,
+    click: digest.click,
+  });
   if (!sent.ok) {
     send(res, 502, { error: sent.reason, digest, channels }, origin);
     return;

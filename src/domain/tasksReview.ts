@@ -10,7 +10,10 @@ import {
   type Task,
 } from "./tasks";
 
-export type TasksVista = "revisao" | "dia" | "matriz" | "kanban";
+export type TasksVista = "revisao" | "lista" | "dia" | "matriz" | "kanban";
+
+/** Tarefas na aba Lista (principais); o resto vai para «Restantes». */
+export const LIST_PAGE_SIZE = 8;
 
 export type DueUrgency = "overdue" | "today" | "soon" | "later" | "none";
 

@@ -6,6 +6,8 @@
 import { KIND_LABEL, custodyInAccount, liquidityByEntity, liquidityOf, ownLiquidityOf, partyOf, personalOwnLiquidity } from "./engine";
 import { entityShort } from "./labels";
 import { findManualDefinition } from "./cadernoManual";
+import { answerMetricQuestion } from "./assistMetrics";
+import { answerPanelFallback, answerPanelQuestion, isInfoSeekingQuery } from "./assistPanel";
 import { roundKz } from "./money";
 import { COMPANIES, type AppState, type EntityId, type Movement, type MovementKind, type Party } from "./types";
 
@@ -761,9 +763,18 @@ export function interpretChat(
   const definition = answerDefinitionQuestion(trimmed);
   if (definition) return { type: "info", text: definition };
 
+  // KPIs de empresa ao vivo («lucro esperado», «porque negativo?») — antes de saldos
+  // para «lucro esperado Plural» não cair só no saldo da empresa.
+  const metric = answerMetricQuestion(trimmed, state);
+  if (metric) return { type: "info", text: metric };
+
   // Perguntas de saldo / dívidas / empresas
   const balance = answerBalanceQuestion(trimmed, state);
   if (balance) return { type: "info", text: balance };
+
+  // Qualquer outra pergunta de informação sobre o painel (bolsos, alertas, resumo…)
+  const panel = answerPanelQuestion(trimmed, state);
+  if (panel) return { type: "info", text: panel };
 
   if (pending) {
     if (isAffirmative(trimmed)) return { type: "confirm" };
@@ -814,6 +825,14 @@ export function interpretChat(
       text: `${proposal.summary}\n${proposal.detail}`,
       options: proposal.clarifyOptions,
     };
+  }
+  // Pedido de info sem montante → nunca «Sem valor»
+  if (
+    proposal.action.type === "unknown" &&
+    (proposal.action.reason === "Sem montante." || proposal.summary === "Sem valor") &&
+    isInfoSeekingQuery(trimmed)
+  ) {
+    return { type: "info", text: answerPanelFallback(trimmed, state) };
   }
   return { type: "fresh", proposal };
 }

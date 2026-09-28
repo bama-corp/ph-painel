@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import {
-  canEditAccountOpening,
   canEditPartyOpening,
   custodyInAccount,
   custodyLiquidity,
@@ -25,7 +24,15 @@ const OWN_LABEL: Record<OwnershipClass, string> = {
 };
 
 export function Contas() {
-  const { state, setParty, setAccountOpening, payParty, collectParty, addParty, removeParty } = useStore();
+  const {
+    state,
+    setParty,
+    setAccountOpening,
+    payParty,
+    collectParty,
+    addParty,
+    removeParty,
+  } = useStore();
   const receber = state.parties.filter((p) => p.entityId === "pessoal" && p.side === "receber");
   const dividaPropria = state.parties.filter(
     (p) => p.entityId === "pessoal" && p.side === "pagar" && p.ownership !== "custody",
@@ -67,52 +74,46 @@ export function Contas() {
         </div>
         <ul>
           {personalAccounts.map((a) => {
-            const editable = canEditAccountOpening(state, a.id);
             const total = liquidityOf(state, a.id);
             const cust = custodyInAccount(state, a.id);
             const own = ownLiquidityOf(state, a.id);
             const over = cust > total + 0.001;
+            /** Desativado só quando o teu é menor que a custódia nesta conta. */
+            const openingLocked = own < cust;
             return (
-              <li key={a.id} className="border-b border-ink/[0.07] py-3 sm:py-2.5">
+              <li key={a.id} className="liq-item">
                 <div className="liq-row">
-                  <span className="truncate text-sm font-medium text-ink/80 sm:font-normal sm:text-ink/70">
-                    {a.name}
+                  <span className="liq-name">{a.name}</span>
+                  <span className="liq-cell" data-label="Total">
+                    <Money n={total} />
                   </span>
-                  <div className="liq-row-nums">
-                    <div className="liq-num">
-                      <span className="liq-num-label">Total</span>
-                      <span className="liq-num-value">
-                        <Money n={total} />
-                      </span>
-                    </div>
-                    <div className="liq-num">
-                      <span className="liq-num-label">Custódia</span>
-                      <span className="liq-num-value">
-                        <Money n={cust} tone="mute" />
-                      </span>
-                    </div>
-                    <div className="liq-num">
-                      <span className="liq-num-label">Teu</span>
-                      <span className="liq-num-value">
-                        <Money n={own} tone={own > 0 ? "plain" : "mute"} />
-                      </span>
-                    </div>
-                  </div>
+                  <span className="liq-cell" data-label="Custódia">
+                    <Money n={cust} tone="mute" />
+                  </span>
+                  <span className="liq-cell" data-label="Teu">
+                    <Money n={own} tone={own > 0 ? "plain" : "mute"} />
+                  </span>
                 </div>
-                {editable ? (
-                  <label className="mt-2 flex max-w-xs items-baseline gap-2 sm:mt-1.5">
-                    <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/30">
-                      opening
-                    </span>
-                    <input
-                      className="field num m-0 min-w-0 flex-1 py-1 text-right text-sm"
-                      defaultValue={a.opening}
-                      onBlur={(e) =>
-                        setAccountOpening(a.id, Number(String(e.target.value).replace(",", ".")) || 0)
-                      }
-                    />
-                  </label>
-                ) : null}
+                <label className="mt-2 flex max-w-xs items-baseline gap-2 sm:mt-1.5">
+                  <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-ink/30">
+                    opening
+                  </span>
+                  <input
+                    key={`${a.id}-open-${a.opening}`}
+                    className="field num m-0 min-w-0 flex-1 py-1 text-right text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                    defaultValue={a.opening}
+                    disabled={openingLocked}
+                    title={
+                      openingLocked
+                        ? "Opening bloqueado: o teu valor nesta conta é menor que a custódia."
+                        : undefined
+                    }
+                    onBlur={(e) => {
+                      if (openingLocked) return;
+                      setAccountOpening(a.id, Number(String(e.target.value).replace(",", ".")) || 0);
+                    }}
+                  />
+                </label>
                 {over ? (
                   <p className="mt-1 text-[0.7rem] text-rust">
                     Custódia atribuída a esta conta &gt; saldo — diz onde está cada um em baixo.

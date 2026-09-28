@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useLocation } from "react-router-dom";
 import {
-  interpretChat,
-  proposalKindLabel,
-  type ClarifyOption,
-  type ReportProposal,
-} from "../domain/dailyReport";
-import { todayIso } from "../domain/money";
-import { useStore } from "../domain/store";
-import { DateField } from "../ui/DateField";
+  interpretTasksChat,
+  tasksAssistActionLabel,
+  withNewSubtask,
+  type TasksAssistProposal,
+  type TasksClarifyOption,
+} from "../domain/tasksAssist";
+import { entityFromTasksPath } from "../domain/tasks";
+import { useTasks } from "../domain/tasksStore";
 import { Mark } from "../ui/Page";
 
 type MsgKind = "welcome" | "info" | "proposal" | "clarify" | "status" | "user";
@@ -19,61 +20,46 @@ type ChatMsg = {
   text: string;
   title?: string;
   body?: string;
-  footer?: string;
-  proposal?: ReportProposal;
-  clarifyOptions?: ClarifyOption[];
+  proposal?: TasksAssistProposal;
+  clarifyOptions?: TasksClarifyOption[];
   status?: "pending" | "done" | "skipped" | "failed" | "clarify";
   failReason?: string;
 };
 
 const WELCOME =
-  "Pergunta o que quiseres do painel — saldos, bolsos, empresas, alertas, lucro… Eu respondo com os números ao vivo. Para registar, diz o que aconteceu com valor.";
+  "Tarefas do dia, inbox ou cria/conclui — eu proponho, tu confirmas.";
 
 const CHIPS = [
-  "Resumo",
-  "Alertas",
-  "Bolsos",
-  "Lucro esperado Plural",
-  "Porque lucro esperado negativo?",
-  "Clientes Plural",
-  "O que é custódia?",
+  "O que tenho hoje?",
+  "Atrasadas",
+  "Inbox",
+  "Adiciona tarefa ",
 ] as const;
 
 function uid() {
-  return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-/** Parte respostas do Caderno / saldo em título · corpo · rodapé. */
-function parseInfoText(text: string): Pick<ChatMsg, "title" | "body" | "footer" | "text"> {
-  const parts = text.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
-  if (parts.length === 0) return { text };
-  const last = parts[parts.length - 1]!;
-  if (last.startsWith("—") && parts.length >= 2) {
-    const footer = last;
-    const title = parts[0];
-    const body = parts.slice(1, -1).join("\n\n") || undefined;
-    return { text, title, body, footer };
-  }
-  if (parts.length >= 2) {
-    return { text, title: parts[0], body: parts.slice(1).join("\n\n") };
-  }
-  return { text, body: text };
+  return `tc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function infoReply(text: string): ChatMsg {
-  return {
-    id: uid(),
-    role: "assistant",
-    kind: "info",
-    ...parseInfoText(text),
-  };
+  const parts = text.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      id: uid(),
+      role: "assistant",
+      kind: "info",
+      text,
+      title: parts[0],
+      body: parts.slice(1).join("\n\n"),
+    };
+  }
+  return { id: uid(), role: "assistant", kind: "info", text, body: text };
 }
 
 function statusReply(text: string): ChatMsg {
   return { id: uid(), role: "assistant", kind: "status", text };
 }
 
-function proposalReply(p: ReportProposal, preface?: string): ChatMsg {
+function proposalReply(p: TasksAssistProposal, preface?: string): ChatMsg {
   if (p.action.type === "unknown") {
     return {
       id: uid(),
@@ -95,7 +81,7 @@ function proposalReply(p: ReportProposal, preface?: string): ChatMsg {
   };
 }
 
-function clarifyReply(text: string, options: ClarifyOption[]): ChatMsg {
+function clarifyReply(text: string, options: TasksClarifyOption[]): ChatMsg {
   return {
     id: uid(),
     role: "assistant",
@@ -106,41 +92,16 @@ function clarifyReply(text: string, options: ClarifyOption[]): ChatMsg {
   };
 }
 
-function BodyLines({ text }: { text: string }) {
-  const lines = text.split("\n");
-  return (
-    <div className="space-y-1.5">
-      {lines.map((line, i) => {
-        const step = /^(\d+)[.)]\s+(.*)$/.exec(line);
-        const bullet = /^[·•]\s*(.*)$/.exec(line);
-        if (step) {
-          return (
-            <p key={i} className="chat-step flex gap-2.5 text-[0.8rem] leading-relaxed text-ink/70">
-              <span className="num shrink-0 w-5 text-ink/40">{step[1]}.</span>
-              <span className="min-w-0 flex-1">{step[2]}</span>
-            </p>
-          );
-        }
-        if (bullet) {
-          return (
-            <p key={i} className="flex gap-2.5 text-[0.8rem] leading-relaxed text-ink/70">
-              <span className="shrink-0 text-ink/35">·</span>
-              <span className="min-w-0 flex-1">{bullet[1]}</span>
-            </p>
-          );
-        }
-        if (!line.trim()) return <div key={i} className="h-1.5" />;
-        return (
-          <p key={i} className="text-[0.8rem] leading-relaxed text-ink/70 whitespace-pre-wrap">
-            {line}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-function ChipRow({ onPick, disabled }: { onPick: (t: string) => void; disabled?: boolean }) {
+function ChipRow({
+  onPick,
+  onFill,
+  disabled,
+}: {
+  onPick: (t: string) => void;
+  /** Chips que terminam em espaço: preenche o input em vez de enviar. */
+  onFill?: (t: string) => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="assistente-chips">
       {CHIPS.map((c) => (
@@ -149,38 +110,96 @@ function ChipRow({ onPick, disabled }: { onPick: (t: string) => void; disabled?:
           type="button"
           disabled={disabled}
           className="assistente-chip"
-          onClick={() => onPick(c)}
+          onClick={() => {
+            if (c.endsWith(" ") && onFill) onFill(c);
+            else onPick(c.trimEnd());
+          }}
         >
-          {c}
+          {c.trimEnd()}
         </button>
       ))}
     </div>
   );
 }
 
-export function AssistenteFab() {
-  const { state, addMovement, payParty, collectParty } = useStore();
+function entityHintFromPath(pathname: string) {
+  if (!pathname.startsWith("/tarefas")) return undefined;
+  const rest = pathname.replace(/^\/tarefas\/?/, "");
+  const seg = rest.split("/")[0];
+  if (
+    !seg ||
+    seg === "calendario" ||
+    seg === "rotina" ||
+    seg === "alertas" ||
+    seg === "sistema"
+  ) {
+    return seg ? undefined : "pessoal";
+  }
+  return entityFromTasksPath(seg);
+}
+
+export function TarefasAssistenteFab() {
+  const { pathname } = useLocation();
+  const { tasks, add, setStatus, toggleFocusToday, update } = useTasks();
+  const entityHint = entityHintFromPath(pathname);
+
   const [open, setOpen] = useState(false);
-  const [at, setAt] = useState(todayIso);
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([
     { id: "welcome", role: "assistant", kind: "welcome", text: WELCOME },
   ]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [msgs, open]);
 
+  /** Mobile: altura do sheet = visualViewport (teclado). */
   useEffect(() => {
     if (!open) return;
-    // No telemóvel o teclado a abrir logo cobre o sheet; no desktop focamos.
+    const el = wrapRef.current;
+    const vv = window.visualViewport;
+    if (!el || !vv) return;
+
+    function sync() {
+      if (!el || !vv) return;
+      const top = Math.max(0, vv.offsetTop);
+      const h = Math.max(240, vv.height);
+      el.style.setProperty("--assistente-vv-top", `${top}px`);
+      el.style.setProperty("--assistente-vvh", `${h}px`);
+    }
+
+    sync();
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+      el.style.removeProperty("--assistente-vv-top");
+      el.style.removeProperty("--assistente-vvh");
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     if (typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) {
       inputRef.current?.focus();
     }
   }, [open]);
+
+  function fillComposer(prefix: string) {
+    setInput(prefix);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const len = prefix.length;
+      inputRef.current?.setSelectionRange(len, len);
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -231,12 +250,87 @@ export function AssistenteFab() {
     );
   }
 
+  function applyOne(p: TasksAssistProposal): { ok: true } | { ok: false; reason: string } {
+    const a = p.action;
+    if (a.type === "add") {
+      return add(a.draft);
+    }
+    if (a.type === "setStatus") {
+      return setStatus(a.id, a.status);
+    }
+    if (a.type === "toggleFocus") {
+      return toggleFocusToday(a.id);
+    }
+    if (a.type === "setDue") {
+      return update(a.id, { due: a.due });
+    }
+    if (a.type === "addSubtask") {
+      const t = tasks.find((x) => x.id === a.id);
+      if (!t) return { ok: false, reason: "Tarefa em falta." };
+      const next = withNewSubtask(t, a.subtaskTitle);
+      return update(a.id, { subtasks: next.subtasks });
+    }
+    return { ok: false, reason: a.reason || "Acção desconhecida." };
+  }
+
+  function applyProposal(msgId: string, p: TasksAssistProposal) {
+    const r = applyOne(p);
+    if (!r.ok) {
+      setMsgs((list) =>
+        list.map((m) =>
+          m.id === msgId
+            ? {
+                ...m,
+                status: "failed" as const,
+                failReason: r.reason,
+              }
+            : m,
+        ),
+      );
+      return;
+    }
+    setMsgs((list) => [
+      ...list.map((m) =>
+        m.id === msgId
+          ? {
+              ...m,
+              kind: "status" as const,
+              status: "done" as const,
+              text: `Feito — ${p.summary}`,
+              proposal: undefined,
+              failReason: undefined,
+            }
+          : m,
+      ),
+    ]);
+  }
+
+  function skipProposal(msgId: string) {
+    setMsgs((list) =>
+      list.map((m) =>
+        m.id === msgId
+          ? {
+              ...m,
+              kind: "status" as const,
+              status: "skipped" as const,
+              text: "Ok, ignorei.",
+              proposal: undefined,
+              clarifyOptions: undefined,
+            }
+          : m,
+      ),
+    );
+  }
+
   function send(text: string) {
     const line = text.trim();
     if (!line) return;
     const userMsg: ChatMsg = { id: uid(), role: "user", kind: "user", text: line };
     const pend = pendingMsg();
-    const turn = interpretChat(line, state, at, pend?.proposal ?? null);
+    const turn = interpretTasksChat(line, tasks, {
+      entityHint,
+      pending: pend?.proposal ?? null,
+    });
 
     if (turn.type === "confirm" && pend?.proposal) {
       setMsgs((m) => [...m, userMsg]);
@@ -260,39 +354,19 @@ export function AssistenteFab() {
             : m,
         ),
         userMsg,
-        statusReply("Descartado. Diz outra coisa do dia quando quiseres."),
+        statusReply("Descartado. Diz outra coisa quando quiseres."),
       ]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "revise" && pend) {
-      setMsgs((list) => [
-        ...list.map((m) =>
-          m.id === pend.id
-            ? {
-                ...m,
-                kind: "status" as const,
-                status: "skipped" as const,
-                text: `Actualizado (${turn.tip}).`,
-                proposal: undefined,
-              }
-            : m,
-        ),
-        userMsg,
-        proposalReply(turn.proposal, `Actualizei (${turn.tip}):`),
-      ]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "orphan_fix") {
-      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
       setInput("");
       return;
     }
 
     if (turn.type === "info") {
+      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
+      setInput("");
+      return;
+    }
+
+    if (turn.type === "unknown") {
       setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
       setInput("");
       return;
@@ -304,17 +378,16 @@ export function AssistenteFab() {
       return;
     }
 
-    const proposal = turn.type === "fresh" ? turn.proposal : null;
-    if (!proposal) {
+    if (turn.type === "fresh") {
+      setMsgs((list) => [...clearPending(list), userMsg, proposalReply(turn.proposal)]);
       setInput("");
       return;
     }
 
-    setMsgs((list) => [...clearPending(list), userMsg, proposalReply(proposal)]);
     setInput("");
   }
 
-  function pickClarify(msgId: string, option: ClarifyOption) {
+  function pickClarify(msgId: string, option: TasksClarifyOption) {
     setMsgs((list) => [
       ...list.map((m) =>
         m.id === msgId
@@ -343,95 +416,13 @@ export function AssistenteFab() {
     }
   }
 
-  function applyProposal(msgId: string, p: ReportProposal) {
-    const r = applyOne(p);
-    if (!r.ok) {
-      setMsgs((list) => [
-        ...list.map((m) =>
-          m.id === msgId
-            ? {
-                ...m,
-                status: "pending" as const,
-                failReason: r.reason,
-                text: `Não deu.\n${r.reason}`,
-                proposal: p,
-              }
-            : m,
-        ),
-      ]);
-      return;
-    }
-    setMsgs((list) => [
-      ...list.map((m) =>
-        m.id === msgId
-          ? {
-              ...m,
-              kind: "status" as const,
-              status: "done" as const,
-              text: `Gravado.\n${p.summary}\n${p.detail}`,
-              title: "Gravado",
-              body: `${p.summary}\n${p.detail}`,
-              proposal: undefined,
-              failReason: undefined,
-            }
-          : m,
-      ),
-      statusReply("Feito. Mais alguma coisa?"),
-    ]);
-  }
-
-  function skipProposal(msgId: string) {
-    setMsgs((list) =>
-      list.map((m) =>
-        m.id === msgId
-          ? {
-              ...m,
-              kind: "status" as const,
-              status: "skipped",
-              text: "Ok, ignorei. Diz de outra forma se quiseres.",
-              proposal: undefined,
-              clarifyOptions: undefined,
-            }
-          : m,
-      ),
-    );
-  }
-
-  function applyOne(p: ReportProposal): { ok: true } | { ok: false; reason: string } {
-    const a = p.action;
-    if (a.type === "movement") {
-      const r = addMovement(a.draft);
-      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
-    }
-    if (a.type === "payParty") {
-      const r = payParty({
-        partyId: a.partyId,
-        accountId: a.accountId,
-        amount: a.amount,
-        at: a.at,
-        note: a.note,
-      });
-      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
-    }
-    if (a.type === "collectParty") {
-      const r = collectParty({
-        partyId: a.partyId,
-        accountId: a.accountId,
-        amount: a.amount,
-        at: a.at,
-        note: a.note,
-      });
-      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
-    }
-    return { ok: false, reason: "Acção desconhecida." };
-  }
-
   const pending = msgs.some((m) => m.status === "pending" || m.status === "clarify");
   const onlyWelcome = msgs.length === 1 && msgs[0]?.kind === "welcome";
 
   return (
     <div
-      className={`assistente-fab-wrap pointer-events-none fixed z-40 flex flex-col items-end gap-3 ${
+      ref={wrapRef}
+      className={`assistente-fab-wrap assistente-fab-tarefas pointer-events-none fixed z-40 flex flex-col items-end gap-3 ${
         open ? "is-open" : ""
       }`}
     >
@@ -448,20 +439,15 @@ export function AssistenteFab() {
             style={{ background: "rgb(var(--paper))" }}
             role="dialog"
             aria-modal="true"
-            aria-label="Assistente"
+            aria-label="Assistente de tarefas"
           >
             <header className="flex shrink-0 items-center gap-3 border-b border-ink/10 px-4 py-3 sm:px-5">
               <Mark tone={pending ? "copper" : "pine"} />
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <p className="font-display text-[1.1rem] font-semibold tracking-tight text-ink sm:text-[1.05rem]">
-                    Assistente
-                  </p>
-                  <label className="flex items-center gap-2 text-[0.65rem] text-ink/40">
-                    <span className="uppercase tracking-[0.14em]">Data</span>
-                    <DateField inline value={at} onChange={setAt} className="min-w-[7.5rem]" />
-                  </label>
-                </div>
+                <p className="font-display text-[1.1rem] font-semibold tracking-tight text-ink sm:text-[1.05rem]">
+                  Assistente · Tarefas
+                </p>
+                <p className="text-[0.65rem] text-ink/40">Propõe · tu confirmas</p>
               </div>
               <button
                 type="button"
@@ -492,7 +478,7 @@ export function AssistenteFab() {
                   <p className="mb-2 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
                     Atalhos
                   </p>
-                  <ChipRow onPick={send} disabled={pending} />
+                  <ChipRow onPick={send} onFill={fillComposer} disabled={pending} />
                 </div>
               ) : null}
               <div ref={bottomRef} />
@@ -501,7 +487,7 @@ export function AssistenteFab() {
             <div className="shrink-0 border-t border-ink/10 px-3 py-3 sm:px-4">
               {!onlyWelcome ? (
                 <div className="mb-2.5">
-                  <ChipRow onPick={send} disabled={pending} />
+                  <ChipRow onPick={send} onFill={fillComposer} disabled={pending} />
                 </div>
               ) : null}
               <form className="flex gap-2" onSubmit={onSubmit}>
@@ -510,8 +496,8 @@ export function AssistenteFab() {
                   className="assistente-composer-input"
                   placeholder={
                     pending
-                      ? "na caixa · foi 25000 · sim…"
-                      : "Emprestei 2000kz… ou um conceito"
+                      ? "sim · não · ou outra frase…"
+                      : "O que tenho hoje? · adiciona tarefa…"
                   }
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -539,7 +525,7 @@ export function AssistenteFab() {
           open ? "hidden sm:flex" : ""
         }`}
         style={{ background: "rgb(var(--paper))" }}
-        aria-label={open ? "Fechar assistente" : "Abrir assistente"}
+        aria-label={open ? "Fechar assistente" : "Abrir assistente de tarefas"}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -570,7 +556,7 @@ function MessageBubble({
   msg: ChatMsg;
   onConfirm: () => void;
   onSkip: () => void;
-  onClarify: (opt: ClarifyOption) => void;
+  onClarify: (opt: TasksClarifyOption) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -593,7 +579,7 @@ function MessageBubble({
 
   const label =
     msg.kind === "proposal" && msg.status === "pending" && msg.proposal
-      ? proposalKindLabel(msg.proposal)
+      ? tasksAssistActionLabel(msg.proposal.action)
       : msg.kind === "clarify"
         ? "Clarificar"
         : msg.kind === "welcome"
@@ -616,18 +602,26 @@ function MessageBubble({
           <p className="font-display text-[1rem] font-semibold tracking-tight text-ink">
             {msg.proposal.summary}
           </p>
-          <p className="mt-1.5 text-[0.78rem] leading-relaxed text-ink/55 whitespace-pre-wrap">
+          <p className="mt-1.5 whitespace-pre-wrap text-[0.78rem] leading-relaxed text-ink/55">
             {msg.proposal.detail}
           </p>
           {msg.failReason ? (
             <p className="mt-2 text-[0.72rem] leading-snug text-rust">{msg.failReason}</p>
           ) : null}
-          <p className="mt-3 text-[0.7rem] text-ink/40">Gravo no ledger?</p>
+          <p className="mt-3 text-[0.7rem] text-ink/40">Aplicar nas tarefas?</p>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            <button type="button" className="btn-solid min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs" onClick={onConfirm}>
+            <button
+              type="button"
+              className="btn-solid min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs"
+              onClick={onConfirm}
+            >
               Confirmar
             </button>
-            <button type="button" className="btn-ghost min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs" onClick={onSkip}>
+            <button
+              type="button"
+              className="btn-ghost min-h-11 flex-1 py-2.5 text-sm sm:min-h-0 sm:flex-none sm:py-1.5 sm:text-xs"
+              onClick={onSkip}
+            >
               Ignorar
             </button>
           </div>
@@ -644,7 +638,7 @@ function MessageBubble({
             <Mark tone="copper" />
             Clarificar
           </p>
-          <p className="text-[0.85rem] leading-relaxed text-ink/75 whitespace-pre-wrap">{msg.text}</p>
+          <p className="whitespace-pre-wrap text-[0.85rem] leading-relaxed text-ink/75">{msg.text}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {msg.clarifyOptions.map((opt) => (
               <button
@@ -682,18 +676,9 @@ function MessageBubble({
               {msg.title}
             </p>
           ) : null}
-          {msg.body ? (
-            <div className={msg.title ? "mt-2.5" : undefined}>
-              <BodyLines text={msg.body} />
-            </div>
-          ) : !msg.title ? (
-            <BodyLines text={msg.text} />
-          ) : null}
-          {msg.footer ? (
-            <p className="mt-3 text-[0.65rem] uppercase tracking-[0.12em] text-ink/35">
-              {msg.footer.replace(/^—\s*/, "")}
-            </p>
-          ) : null}
+          <p className="mt-1.5 whitespace-pre-wrap text-[0.85rem] leading-relaxed text-ink/65">
+            {msg.body ?? msg.text}
+          </p>
         </div>
       </div>
     );
@@ -701,12 +686,12 @@ function MessageBubble({
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[95%]">
+      <div className="max-w-[92%]">
         <p className="eyebrow mb-1.5 flex items-center gap-1.5 text-[0.6rem]">
           <Mark tone={markTone} />
           {label}
         </p>
-        <p className="text-[0.8rem] leading-relaxed text-ink/70 whitespace-pre-wrap">{msg.text}</p>
+        <p className="whitespace-pre-wrap text-[0.85rem] leading-relaxed text-ink/70">{msg.text}</p>
       </div>
     </div>
   );

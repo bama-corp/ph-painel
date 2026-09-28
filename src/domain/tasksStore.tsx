@@ -17,6 +17,7 @@ import {
   loadTasks,
   MAX_FOCUS_TODAY,
   mergeTasks,
+  normalizeSubtasks,
   saveTasks,
   stripMockTasks,
   touchTask,
@@ -61,7 +62,15 @@ type TasksApi = {
     patch: Partial<
       Pick<
         Task,
-        "title" | "note" | "due" | "quadrant" | "focusToday" | "status" | "timeboxMin" | "dayBlock"
+        | "title"
+        | "note"
+        | "due"
+        | "quadrant"
+        | "focusToday"
+        | "status"
+        | "timeboxMin"
+        | "dayBlock"
+        | "subtasks"
       >
     >,
   ) => { ok: true } | { ok: false; reason: string };
@@ -388,6 +397,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
               status: patch.status !== undefined ? patch.status : t.status,
               timeboxMin: patch.timeboxMin !== undefined ? patch.timeboxMin : t.timeboxMin,
               dayBlock: patch.dayBlock !== undefined ? patch.dayBlock : t.dayBlock,
+              subtasks:
+                patch.subtasks !== undefined ? normalizeSubtasks(patch.subtasks) : t.subtasks,
             })
           : t,
       );

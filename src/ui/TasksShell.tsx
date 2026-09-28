@@ -4,6 +4,7 @@ import { ENTITY } from "../domain/labels";
 import { openCount, TASK_ALERTS_NAV, TASK_CALENDAR_NAV, TASK_NAV, TASK_ROUTINE_NAV, TASK_SYSTEM_NAV } from "../domain/tasks";
 import { useTasks } from "../domain/tasksStore";
 import { FloatingPomodoro } from "./FloatingPomodoro";
+import { TarefasAssistenteFab } from "../pages/TarefasAssistente";
 
 export function TasksShell({ children }: { children?: ReactNode }) {
   const { tasks, syncStatus, syncError, pushNow } = useTasks();
@@ -149,11 +150,12 @@ export function TasksShell({ children }: { children?: ReactNode }) {
         ) : null}
       </header>
 
-      <main className="px-4 pb-20 pt-6 sm:px-12 sm:pb-24 sm:pt-10 lg:px-16">
+      <main className="px-4 pb-32 pt-6 sm:px-12 sm:pb-24 sm:pt-10 lg:px-16">
         {children ?? <Outlet />}
       </main>
 
       <FloatingPomodoro />
+      <TarefasAssistenteFab />
     </div>
   );
 }

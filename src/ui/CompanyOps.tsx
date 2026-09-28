@@ -75,14 +75,6 @@ export function CompanyOutlook({
         note="Receita − max(registado, planeado). Se o planeado > registado, o lucro «real» ainda vai cair."
       />
       <Stat label="Equity" n={o.equity} mark={tone} note="Caixa + a receber − a pagar + bens." />
-      {o.ownerDue > 0 ? (
-        <Stat
-          label="Conta corrente do proprietário"
-          n={o.ownerDue}
-          mark={tone}
-          note="O dono deve isto à empresa. Reembolso ≠ pró-labore."
-        />
-      ) : null}
       {extra}
     </dl>
   );

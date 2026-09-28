@@ -16,6 +16,7 @@ import { dueUrgency, dueUrgencyClass, dueUrgencyLabel } from "../domain/tasksRev
 import { useTasks } from "../domain/tasksStore";
 import { CalendarBoard } from "../ui/CalendarBoard";
 import { Select, type SelectOption } from "../ui/Select";
+import { TaskSubtasks } from "../ui/TaskSubtasks";
 import { Mark, PageHeader } from "../ui/Page";
 
 const QUADRANT_OPTIONS: SelectOption<TaskQuadrant>[] = [
@@ -51,7 +52,15 @@ export function TarefasCalendario() {
     patch: Partial<
       Pick<
         Task,
-        "title" | "note" | "due" | "quadrant" | "focusToday" | "status" | "timeboxMin" | "dayBlock"
+        | "title"
+        | "note"
+        | "due"
+        | "quadrant"
+        | "focusToday"
+        | "status"
+        | "timeboxMin"
+        | "dayBlock"
+        | "subtasks"
       >
     >,
   ) {
@@ -140,7 +149,15 @@ function CalTaskRow({
     patch: Partial<
       Pick<
         Task,
-        "title" | "note" | "due" | "quadrant" | "focusToday" | "status" | "timeboxMin" | "dayBlock"
+        | "title"
+        | "note"
+        | "due"
+        | "quadrant"
+        | "focusToday"
+        | "status"
+        | "timeboxMin"
+        | "dayBlock"
+        | "subtasks"
       >
     >,
   ) => void;
@@ -159,6 +176,11 @@ function CalTaskRow({
         {task.title}
       </p>
       {task.note ? <p className="mt-1 text-sm text-ink/55">{task.note}</p> : null}
+      <TaskSubtasks
+        subtasks={task.subtasks ?? []}
+        disabled={feita}
+        onChange={(next) => onUpdate(task.id, { subtasks: next })}
+      />
       <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
         <span>{STATUS_LABEL[task.status]}</span>
         {task.due ? (

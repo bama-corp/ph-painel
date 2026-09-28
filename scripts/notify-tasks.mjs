@@ -1,5 +1,5 @@
 /**
- * Digest de tarefas → Telegram / ntfy.
+ * Digest de tarefas → ntfy / Telegram.
  * Uso: node scripts/notify-tasks.mjs
  *      node scripts/notify-tasks.mjs --test
  *      node scripts/notify-tasks.mjs --dry
@@ -8,7 +8,12 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureTasksSchema, getTasksSql, listTasks } from "../server/db.mjs";
-import { buildTasksDigest, notifyChannelsConfigured, sendNotify } from "../server/notify.mjs";
+import {
+  buildTasksDigest,
+  buildTestNotify,
+  notifyChannelsConfigured,
+  sendNotify,
+} from "../server/notify.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -38,12 +43,11 @@ if (!channels.any) {
   process.exit(1);
 }
 
-let text;
-let counts;
+/** @type {{ text: string, title?: string, priority?: string, tags?: string, click?: string, counts?: object }} */
+let payload;
 
 if (test) {
-  text = `PH · teste ${new Date().toISOString().slice(0, 19)}Z\nSe leste isto no telemóvel, está ok.`;
-  counts = null;
+  payload = buildTestNotify();
 } else {
   if (!process.env.TASKS_DATABASE_URL) {
     console.error("TASKS_DATABASE_URL em falta");
@@ -52,20 +56,24 @@ if (test) {
   const sql = getTasksSql();
   await ensureTasksSchema(sql);
   const tasks = await listTasks(sql);
-  const digest = buildTasksDigest(tasks);
-  text = digest.text;
-  counts = digest.counts;
+  payload = buildTasksDigest(tasks);
 }
 
-console.log(text);
-if (counts) console.log("counts", counts);
+console.log(`[${payload.title || "PH"}] priority=${payload.priority || "default"} tags=${payload.tags || ""}`);
+console.log(payload.text);
+if (payload.counts) console.log("counts", payload.counts);
 
 if (dry) {
   console.log("dry-run — não enviado");
   process.exit(0);
 }
 
-const sent = await sendNotify(text);
+const sent = await sendNotify(payload.text, {
+  title: payload.title,
+  priority: payload.priority,
+  tags: payload.tags,
+  click: payload.click,
+});
 if (!sent.ok) {
   console.error(sent.reason);
   process.exit(1);

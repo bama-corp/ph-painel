@@ -4,7 +4,6 @@ import {
   cwCosts,
   cwJulyUnclassified,
   liquidityOf,
-  ownerCurrent,
 } from "../domain/engine";
 import { ENTITY } from "../domain/labels";
 import { useStore } from "../domain/store";
@@ -21,8 +20,6 @@ export function Cw() {
   const july = cwJulyUnclassified(state);
   const costs = cwCosts(state);
   const bai2 = liquidityOf(state, "cw-bai2");
-  const owner = ownerCurrent(state);
-  const valorBai2Pds = bai2 + owner;
 
   return (
     <div className="page">
@@ -39,28 +36,16 @@ export function Cw() {
       />
 
       <Section
-        title="BAI 2 — reconciliação"
+        title="BAI 2"
         mark={meta.tone}
-        hint="Conta da PDS. O que falta face ao valor PDS está na conta corrente (deves à empresa)."
+        hint="Conta da PDS. Não há fatia pessoal nesta conta."
       >
         <ul>
           <li className="ledger-row">
-            <span className="text-ink/65">Na conta (PDS)</span>
+            <span className="text-ink/65">Saldo na conta</span>
             <Money n={bai2} />
           </li>
-          <li className="ledger-row">
-            <span className="text-ink/65">Conta corrente (deves à PDS)</span>
-            <Money n={owner} tone="out" />
-          </li>
         </ul>
-        <TotalRow label="Valor PDS no BAI 2" mark={meta.tone}>
-          <Money n={valorBai2Pds} />
-        </TotalRow>
-        <p className="mt-4 text-xs leading-relaxed text-ink/45">
-          Na conta: <Money n={bai2} tone="mute" />. Os{" "}
-          <Money n={owner} tone="mute" /> em falta no valor PDS estão na conta corrente — dívida tua à
-          empresa, não dinheiro desaparecido. Não há fatia pessoal nesta conta.
-        </p>
       </Section>
 
       <CompanyRecentMoves entity="cw" />

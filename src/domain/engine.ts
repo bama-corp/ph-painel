@@ -1150,7 +1150,10 @@ export function partyHasLedgerMovements(state: AppState, partyId: string) {
 }
 
 export function canEditAccountOpening(state: AppState, accountId: string) {
-  return !accountHasLedgerMovements(state, accountId);
+  const cust = custodyInAccount(state, accountId);
+  const own = ownLiquidityOf(state, accountId);
+  /** Editável excepto quando o teu na conta é menor que a custódia. */
+  return !(own < cust);
 }
 
 export function canEditPartyOpening(state: AppState, partyId: string) {
@@ -1161,7 +1164,7 @@ export type OpeningEditResult =
   | { ok: true; state: AppState }
   | { ok: false; reason: string; state: AppState };
 
-/** Define opening só se ainda não houver movimentos no ledger dessa conta. */
+/** Define opening; bloqueado só se o teu nesta conta for menor que a custódia. */
 export function applyAccountOpening(state: AppState, accountId: string, opening: number): OpeningEditResult {
   if (!state.accounts.some((a) => a.id === accountId)) {
     return { ok: false, reason: "Conta inexistente.", state };
@@ -1169,7 +1172,7 @@ export function applyAccountOpening(state: AppState, accountId: string, opening:
   if (!canEditAccountOpening(state, accountId)) {
     return {
       ok: false,
-      reason: "Opening bloqueado: já existem movimentos. Usa um ajuste auditado.",
+      reason: "Opening bloqueado: o teu valor nesta conta é menor que a custódia.",
       state,
     };
   }

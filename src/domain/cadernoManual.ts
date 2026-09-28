@@ -202,7 +202,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Opening",
-        d: "Saldo inicial da conta ou party. Editável só enquanto não houver movimentos no ledger.",
+        d: "Saldo inicial da conta ou party. Nas contas, editável excepto quando o teu nessa conta é menor que a custódia; nas parties, só enquanto não houver movimentos no ledger.",
       },
       {
         t: "Liquidez bruta",
@@ -250,7 +250,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Ajuste auditado",
-        d: "Movimento que corrige o saldo vivo sem alterar o opening (mundo ↔ liquidez). Usa quando o banco real ≠ painel e já há movimentos (opening bloqueado).",
+        d: "Movimento que corrige o saldo vivo sem alterar o opening (mundo ↔ liquidez). Usa quando o banco real ≠ painel.",
       },
       {
         t: "Mundo",
@@ -482,7 +482,7 @@ export const GLOSSARIO: ManualSection[] = [
     terms: [
       {
         t: "Como calcular lucro",
-        d: "No painel há dois lucros — não mistures:\n\n· Lucro registado = receitas do mês − (despesas + pró-labore) já no ledger.\n· Lucro esperado = receita − o maior entre despesas registadas e custos planeados (mostra o que ainda falta registar).\n\nPassos:\n1. Abre a empresa (PDS / Plural / Picasso's / PH).\n2. Confirma que as receitas do mês estão no Registo (com serviço/categoria se for PDS).\n3. Regista despesas e pró-labore do mês — senão o lucro registado fica inflacionado.\n4. Compara com custos recorrentes: se o planeado > registado, há «por registar».\n5. Lucro ≠ caixa livre: ainda precisas de liquidez para operar; tirar dinheiro é pró-labore / distribuição / empréstimo — nunca «despesa» solta.\n\nAtalho: pergunta no Assistente «lucro registado» ou «lucro esperado».",
+        d: "No painel há dois lucros — não mistures:\n\n· Lucro registado = receitas do mês − (despesas + pró-labore) já no ledger.\n· Lucro esperado = receita − o maior entre despesas registadas e custos planeados (mostra o que ainda falta registar).\n\nPassos:\n1. Abre a empresa (PDS / Plural / Picasso's / PH).\n2. Confirma que as receitas do mês estão no Registo (com serviço/categoria se for PDS).\n3. Regista despesas e pró-labore do mês — senão o lucro registado fica inflacionado.\n4. Compara com custos recorrentes: se o planeado > registado, há «por registar».\n5. Lucro ≠ caixa livre: ainda precisas de liquidez para operar; tirar dinheiro é pró-labore / distribuição / empréstimo — nunca «despesa» solta.\n\nAtalho no Assistente: «lucro esperado Plural», «lucro registado PDS» ou «porque o lucro esperado está negativo?» — responde com os números ao vivo.",
       },
       {
         t: "Como fazer lucro",

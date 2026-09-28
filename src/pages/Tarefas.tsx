@@ -13,6 +13,7 @@ import {
   NEXT_STATUS,
   openCount,
   QUADRANT_LABEL,
+  rankByImpact,
   STATUS_LABEL,
   TIMEBOX_PRESETS,
   tasksOf,
@@ -31,6 +32,7 @@ import {
   formatWeekLabel,
   isReviewMarkedDone,
   isWeeklyReviewDone,
+  LIST_PAGE_SIZE,
   markReviewDone,
   markWeeklyReviewDone,
   type TasksVista,
@@ -41,6 +43,7 @@ import { EisenhowerMatrix } from "../ui/EisenhowerMatrix";
 import { FocusTimer } from "../ui/FocusTimer";
 import { KanbanBoard } from "../ui/KanbanBoard";
 import { Select, type SelectOption } from "../ui/Select";
+import { TaskSubtasks } from "../ui/TaskSubtasks";
 import { Mark, PageHeader, Sep, type MarkTone } from "../ui/Page";
 
 const QUADRANT_OPTIONS: SelectOption<TaskQuadrant>[] = [
@@ -74,6 +77,7 @@ export function Tarefas() {
   const review = buildReviewSnapshot(tasks, entityId);
 
   const [vista, setVista] = useState<TasksVista>("revisao");
+  const [listaAba, setListaAba] = useState<"principais" | "restantes">("principais");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -99,6 +103,12 @@ export function Tarefas() {
   const heading = isMine ? "Minhas tarefas" : `Tarefas · ${meta.short}`;
   const stepsOk = review.steps.filter((s) => s.ok).length;
   const weeklyOk = review.weekly.filter((s) => s.ok).length;
+
+  const openRanked = rankByImpact(list.filter((t) => t.status !== "feita"));
+  const listaPrincipais = openRanked.slice(0, LIST_PAGE_SIZE);
+  const listaRestantes = openRanked.slice(LIST_PAGE_SIZE);
+  const listaShown = listaAba === "principais" ? listaPrincipais : listaRestantes;
+  const listaNumOffset = listaAba === "principais" ? 0 : LIST_PAGE_SIZE;
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -144,7 +154,15 @@ export function Tarefas() {
     patch: Partial<
       Pick<
         Task,
-        "title" | "note" | "due" | "quadrant" | "focusToday" | "status" | "timeboxMin" | "dayBlock"
+        | "title"
+        | "note"
+        | "due"
+        | "quadrant"
+        | "focusToday"
+        | "status"
+        | "timeboxMin"
+        | "dayBlock"
+        | "subtasks"
       >
     >,
   ) {
@@ -185,6 +203,7 @@ export function Tarefas() {
           {(
             [
               ["revisao", "Revisão"],
+              ["lista", "Lista"],
               ["dia", "Dia"],
               ["matriz", "Matriz"],
               ["kanban", "Kanban"],
@@ -198,9 +217,15 @@ export function Tarefas() {
               className={`min-h-10 px-3 sm:min-h-0 ${
                 vista === id ? "text-ink border-b border-ink" : "text-ink/40 hover:text-ink"
               }`}
-              onClick={() => setVista(id)}
+              onClick={() => {
+                setVista(id);
+                if (id === "lista") setListaAba("principais");
+              }}
             >
               {label}
+              {id === "lista" && listaRestantes.length > 0 ? (
+                <span className="ml-1.5 num text-[0.65rem] text-ink/35">{listaRestantes.length}</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -354,8 +379,8 @@ export function Tarefas() {
               count={review.twoMin.length}
               hint="Candidatos óbvios (timebox 2′ ou inbox sem Eisenhower). Faz e limpa."
             >
-              {review.twoMin.map((t) => (
-                <TaskRow key={t.id} {...rowProps(t)} highlightTwoMin />
+              {review.twoMin.map((t, i) => (
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} highlightTwoMin />
               ))}
             </ReviewBlock>
           ) : null}
@@ -368,8 +393,8 @@ export function Tarefas() {
               count={review.inboxRest.length || review.inbox.length}
               hint="Eisenhower + passa a «Para fazer». Se for ≤2 min, marca timebox 2′."
             >
-              {(review.twoMin.length > 0 ? review.inboxRest : review.inbox).map((t) => (
-                <TaskRow key={t.id} {...rowProps(t)} />
+              {(review.twoMin.length > 0 ? review.inboxRest : review.inbox).map((t, i) => (
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
               ))}
             </ReviewBlock>
           ) : null}
@@ -388,7 +413,7 @@ export function Tarefas() {
               <p className="py-3 text-sm text-ink/45">Nenhuma prioridade — vê sugestões abaixo.</p>
             ) : (
               review.focus.map((t, i) => (
-                <TaskRow key={t.id} {...rowProps(t)} impactRank={i + 1} />
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} impactRank={i + 1} />
               ))
             )}
           </ReviewBlock>
@@ -401,7 +426,7 @@ export function Tarefas() {
               hint="Maior impacto primeiro — marca «Hoje» nas que contam."
             >
               {review.impactCandidates.slice(0, review.focusSlotsLeft + 2).map((t, i) => (
-                <TaskRow key={t.id} {...rowProps(t)} impactRank={i + 1} />
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} impactRank={i + 1} />
               ))}
             </ReviewBlock>
           ) : null}
@@ -427,8 +452,8 @@ export function Tarefas() {
               count={review.overdue.length}
               hint="Reagenda o prazo ou conclui."
             >
-              {review.overdue.map((t) => (
-                <TaskRow key={t.id} {...rowProps(t)} />
+              {review.overdue.map((t, i) => (
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
               ))}
             </ReviewBlock>
           ) : null}
@@ -442,7 +467,9 @@ export function Tarefas() {
             {review.dueWeek.length === 0 ? (
               <p className="py-3 text-sm text-ink/45">Sem prazos nesta semana.</p>
             ) : (
-              review.dueWeek.map((t) => <TaskRow key={t.id} {...rowProps(t)} />)
+              review.dueWeek.map((t, i) => (
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
+              ))
             )}
           </ReviewBlock>
 
@@ -455,7 +482,9 @@ export function Tarefas() {
             {review.doneToday.length === 0 ? (
               <p className="py-3 text-sm text-ink/45">Ainda sem conclusões hoje.</p>
             ) : (
-              review.doneToday.map((t) => <TaskRow key={t.id} {...rowProps(t)} />)
+              review.doneToday.map((t, i) => (
+                <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
+              ))
             )}
           </ReviewBlock>
 
@@ -527,6 +556,93 @@ export function Tarefas() {
           </section>
 
           <FocusTimer focusTasks={review.focus} />
+        </div>
+      ) : vista === "lista" ? (
+        <div className="mt-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="eyebrow flex items-center gap-2">
+                <Mark tone={meta.tone} />
+                Lista
+              </p>
+              <p className="mt-1 text-sm text-ink/45">
+                Até {LIST_PAGE_SIZE} principais por impacto; o resto na outra aba.
+              </p>
+            </div>
+            <div
+              className="flex gap-1 text-xs uppercase tracking-[0.12em]"
+              role="tablist"
+              aria-label="Página da lista"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={listaAba === "principais"}
+                className={`min-h-10 px-3 sm:min-h-0 ${
+                  listaAba === "principais"
+                    ? "border-b border-ink text-ink"
+                    : "text-ink/40 hover:text-ink"
+                }`}
+                onClick={() => setListaAba("principais")}
+              >
+                Principais
+                <span className="ml-1.5 num text-[0.65rem] text-ink/35">
+                  {listaPrincipais.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={listaAba === "restantes"}
+                className={`min-h-10 px-3 sm:min-h-0 ${
+                  listaAba === "restantes"
+                    ? "border-b border-ink text-ink"
+                    : "text-ink/40 hover:text-ink"
+                }`}
+                onClick={() => setListaAba("restantes")}
+              >
+                Restantes
+                <span className="ml-1.5 num text-[0.65rem] text-ink/35">
+                  {listaRestantes.length}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <Sep />
+
+          {listaShown.length === 0 ? (
+            <p className="py-6 text-sm text-ink/45">
+              {listaAba === "principais"
+                ? "Sem tarefas abertas neste âmbito."
+                : `Tudo cabe nas principais (≤${LIST_PAGE_SIZE}).`}
+            </p>
+          ) : (
+            <ul>
+              {listaShown.map((t, i) => (
+                <TaskRow
+                  key={t.id}
+                  {...rowProps(t)}
+                  listNum={listaNumOffset + i + 1}
+                />
+              ))}
+            </ul>
+          )}
+
+          {listaAba === "principais" && listaRestantes.length > 0 ? (
+            <p className="mt-6 text-sm text-ink/45">
+              Mais{" "}
+              <span className="num text-ink/70">{listaRestantes.length}</span> em{" "}
+              <button
+                type="button"
+                className="border-b border-ink/25 pb-px hover:border-ink"
+                onClick={() => setListaAba("restantes")}
+              >
+                Restantes
+              </button>
+              .
+            </p>
+          ) : null}
         </div>
       ) : vista === "dia" ? (
         <>
@@ -656,8 +772,8 @@ export function Tarefas() {
               <ul>
                 {list
                   .filter((t) => t.status === "inbox")
-                  .map((t) => (
-                    <TaskRow key={t.id} {...rowProps(t)} />
+                  .map((t, i) => (
+                    <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
                   ))}
               </ul>
             </section>
@@ -701,6 +817,7 @@ function TaskRow({
   onUpdate,
   onToggleFocus,
   onRemove,
+  listNum,
   impactRank,
   highlightTwoMin,
 }: {
@@ -712,12 +829,22 @@ function TaskRow({
     patch: Partial<
       Pick<
         Task,
-        "title" | "note" | "due" | "quadrant" | "focusToday" | "status" | "timeboxMin" | "dayBlock"
+        | "title"
+        | "note"
+        | "due"
+        | "quadrant"
+        | "focusToday"
+        | "status"
+        | "timeboxMin"
+        | "dayBlock"
+        | "subtasks"
       >
     >,
   ) => void;
   onToggleFocus: () => void;
   onRemove: () => void;
+  /** Índice na lista (01, 02…) */
+  listNum?: number;
   impactRank?: number;
   highlightTwoMin?: boolean;
 }) {
@@ -727,6 +854,7 @@ function TaskRow({
   const [editNote, setEditNote] = useState(task.note);
   const urgency = dueUrgency(task.due);
   const tier = impactTier(impactScore(task));
+  const num = listNum ?? impactRank;
 
   useEffect(() => {
     setEditTitle(task.title);
@@ -753,15 +881,17 @@ function TaskRow({
 
   return (
     <li
-      className={`border-b border-ink/[0.07] py-4 ${
+      className={`min-h-[4.75rem] border-b border-ink/[0.07] py-4 sm:min-h-0 ${
         highlightTwoMin ? "bg-copper/[0.04] px-2 -mx-2 sm:px-3 sm:-mx-3" : ""
       }`}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-8">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-x-2">
-            {impactRank ? (
-              <span className="num shrink-0 text-[0.7rem] text-ink/35">#{impactRank}</span>
+            {num ? (
+              <span className="num w-6 shrink-0 text-[0.7rem] text-ink/35">
+                {String(num).padStart(2, "0")}
+              </span>
             ) : null}
             {task.focusToday && !feita ? (
               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-pine">
@@ -775,7 +905,7 @@ function TaskRow({
             ) : null}
             <input
               aria-label="Título"
-              className={`min-w-0 w-full border-b border-transparent bg-transparent font-display text-lg tracking-tight outline-none focus:border-ink/25 ${
+              className={`min-h-11 min-w-0 w-full border-b border-transparent bg-transparent font-display text-lg tracking-tight outline-none focus:border-ink/25 sm:min-h-0 ${
                 feita ? "text-ink/45 line-through" : "text-ink"
               }`}
               value={editTitle}
@@ -804,6 +934,11 @@ function TaskRow({
             onBlur={commitNote}
             disabled={feita}
           />
+          <TaskSubtasks
+            subtasks={task.subtasks ?? []}
+            disabled={feita}
+            onChange={(next) => onUpdate(task.id, { subtasks: next })}
+          />
           <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
             <span>{formatDatePt(task.at)}</span>
             {task.due ? (
@@ -823,11 +958,11 @@ function TaskRow({
           </p>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-2 md:w-auto md:max-w-[18rem] md:shrink-0 md:justify-end lg:max-w-[22rem]">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:max-w-[18rem] md:shrink-0 md:justify-end lg:max-w-[22rem]">
           {!feita && (task.status === "inbox" || task.timeboxMin === 2 || highlightTwoMin) ? (
             <button
               type="button"
-              className="btn-ghost !min-h-10 py-2 text-xs sm:!min-h-0 sm:py-1"
+              className="btn-ghost !min-h-11 flex-1 basis-[calc(50%-0.25rem)] py-2.5 text-xs sm:!min-h-0 sm:flex-none sm:basis-auto sm:py-1"
               onClick={doTwoMin}
               title="Regra dos 2 min — marcar como feita"
             >
@@ -839,7 +974,7 @@ function TaskRow({
               inline
               menuAlign="right"
               aria-label="Timebox"
-              className="!min-w-[6.75rem]"
+              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[6.75rem]"
               value={String(task.timeboxMin)}
               onChange={(v) => onUpdate(task.id, { timeboxMin: Number(v) })}
               options={TIMEBOX_OPTIONS}
@@ -850,7 +985,7 @@ function TaskRow({
               inline
               menuAlign="right"
               aria-label="Bloco do dia"
-              className="!min-w-[5.75rem]"
+              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[5.75rem]"
               value={task.dayBlock}
               onChange={(v) => onUpdate(task.id, { dayBlock: v })}
               options={DAY_BLOCK_OPTIONS}
@@ -861,7 +996,7 @@ function TaskRow({
               inline
               menuAlign="right"
               aria-label="Eisenhower"
-              className="!min-w-[8.5rem]"
+              className="!min-h-11 w-full !min-w-0 sm:!min-h-0 sm:w-auto sm:flex-none sm:!min-w-[8.5rem]"
               value={task.quadrant}
               onChange={(v) => onQuadrant(task.id, v)}
               options={QUADRANT_OPTIONS}
@@ -870,7 +1005,7 @@ function TaskRow({
           {!feita ? (
             <button
               type="button"
-              className={`min-h-10 px-2 text-xs uppercase tracking-[0.12em] sm:min-h-0 ${
+              className={`min-h-11 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs uppercase tracking-[0.12em] sm:min-h-0 sm:flex-none sm:basis-auto sm:px-2 ${
                 task.focusToday ? "text-pine" : "text-ink/40 hover:text-ink"
               }`}
               onClick={onToggleFocus}
@@ -881,7 +1016,7 @@ function TaskRow({
           {next ? (
             <button
               type="button"
-              className="btn-ghost !min-h-10 py-2 text-xs sm:!min-h-0 sm:py-1"
+              className="btn-ghost !min-h-11 flex-1 basis-[calc(50%-0.25rem)] py-2.5 text-xs sm:!min-h-0 sm:flex-none sm:basis-auto sm:py-1"
               onClick={() => onStatus(task.id, next)}
             >
               → {STATUS_LABEL[next]}
@@ -890,7 +1025,7 @@ function TaskRow({
           {feita ? (
             <button
               type="button"
-              className="btn-ghost !min-h-10 py-2 text-xs sm:!min-h-0 sm:py-1"
+              className="btn-ghost !min-h-11 flex-1 py-2.5 text-xs sm:!min-h-0 sm:flex-none sm:py-1"
               onClick={() => onStatus(task.id, "para_fazer")}
             >
               Reabrir
@@ -898,7 +1033,7 @@ function TaskRow({
           ) : null}
           <button
             type="button"
-            className="min-h-10 px-2 text-xs text-ink/40 hover:text-rust sm:min-h-0"
+            className="min-h-11 px-3 text-xs text-ink/40 hover:text-rust sm:min-h-0 sm:px-2"
             onClick={onRemove}
           >
             Apagar
