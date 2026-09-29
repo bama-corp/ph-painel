@@ -271,4 +271,21 @@ describe("Assistente — relatório do dia", () => {
     expect(turn.text).not.toMatch(/Como calcular um pró-labore/);
     expect(turn.text).toMatch(/\n/);
   });
+
+  it("mete no caderno sobre Retiradas → proposta addNote", () => {
+    const s = seedState();
+    const turn = interpretChat(
+      "Quero que metas no caderno sobre esse topico: Retiradas do proprietário",
+      s,
+      s.asOf,
+      null,
+    );
+    expect(turn.type).toBe("fresh");
+    if (turn.type !== "fresh") return;
+    expect(turn.proposal.action.type).toBe("addNote");
+    if (turn.proposal.action.type !== "addNote") return;
+    expect(turn.proposal.action.title).toMatch(/[Rr]etiradas/);
+    expect(turn.proposal.action.body.length).toBeGreaterThan(40);
+    expect(turn.proposal.confidence).toBe("high");
+  });
 });

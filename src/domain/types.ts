@@ -6,7 +6,7 @@ export const COMPANIES: Exclude<EntityId, "pessoal">[] = ["cw", "rove", "picasso
 export type OwnershipClass = "own" | "custody" | "company";
 
 /** Versão actual do schema persistido. */
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export type MovementKind =
   | "receita"

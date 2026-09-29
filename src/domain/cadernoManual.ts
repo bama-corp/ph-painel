@@ -466,6 +466,10 @@ export const GLOSSARIO: ManualSection[] = [
         d: "Categoria da receita PADStation: jogos, impressões, cópias, trabalhos, manutenção, outros, por classificar.",
       },
       {
+        t: "Retiradas do proprietário",
+        d: "Quando o dono tira dinheiro da empresa — não é «despesa» da operação.\n\nNatureza de custo «retirada» no Registo marca saídas do proprietário.\nEscolhe o tipo certo:\n· Remuneração regular → pró-labore (empresa → pessoal)\n· Adiantamento a devolver → empréstimo ao proprietário (sobe a C/C)\n· Partilha de lucro → distribuição\n· Tu pagas o que devias à empresa → reembolso (pessoal → empresa; C/C desce)\n\nEm «Custos registados» da empresa, retiradas aparecem só se já lançaste o movimento no mês.\nOs custos recorrentes (funcionário, etc.) são inventário — não entram sozinhos como retirada.",
+      },
+      {
         t: "Natureza (custo)",
         d: "Fixo / variável / investimento / retirada — classificação de custos da empresa.",
       },
@@ -506,7 +510,7 @@ export const GLOSSARIO: ManualSection[] = [
       },
       {
         t: "Como usar o Assistente",
-        d: "· Movimentos: frases com valor («Emprestei 2000kz na PDS»).\n· Saldos: «quanto tenho no BAI», «minhas dívidas».\n· Conceitos: «o que é custódia?», «como calcular lucro?».\n· Confirma sempre antes de gravar.",
+        d: "· Movimentos: frases com valor («Emprestei 2000kz na PDS»).\n· Saldos: «quanto tenho no BAI», «minhas dívidas».\n· Conceitos: «o que é custódia?», «como calcular lucro?».\n· Caderno: «Mete no caderno sobre Retiradas do proprietário» — propõe nota; tu confirmas.\n· Frases livres: se o motor local não entender, a LLM (opcional) só interpreta — nunca grava sozinha.\n· Confirma sempre antes de gravar.",
       },
     ],
   },

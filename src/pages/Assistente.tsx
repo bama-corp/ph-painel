@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  interpretChat,
+  interpretAssistant,
+} from "../domain/assistLlm";
+import {
   proposalKindLabel,
   type ClarifyOption,
   type ReportProposal,
@@ -27,7 +29,7 @@ type ChatMsg = {
 };
 
 const WELCOME =
-  "Pergunta o que quiseres do painel — saldos, bolsos, empresas, alertas, lucro… Eu respondo com os números ao vivo. Para registar, diz o que aconteceu com valor.";
+  "Pergunta o que quiseres do painel — saldos, bolsos, empresas, alertas, lucro… Respondo com números ao vivo. Frases livres usam LLM (se configurada) só para interpretar; tu confirmas antes de gravar. Caderno: «Mete no caderno sobre …».";
 
 const CHIPS = [
   "Resumo",
@@ -37,6 +39,7 @@ const CHIPS = [
   "Porque lucro esperado negativo?",
   "Clientes Plural",
   "O que é custódia?",
+  "Mete no caderno sobre Retiradas do proprietário",
 ] as const;
 
 function uid() {
@@ -159,10 +162,11 @@ function ChipRow({ onPick, disabled }: { onPick: (t: string) => void; disabled?:
 }
 
 export function AssistenteFab() {
-  const { state, addMovement, payParty, collectParty } = useStore();
+  const { state, addMovement, payParty, collectParty, addNote } = useStore();
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState(todayIso);
   const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsg[]>([
     { id: "welcome", role: "assistant", kind: "welcome", text: WELCOME },
   ]);
@@ -231,87 +235,81 @@ export function AssistenteFab() {
     );
   }
 
-  function send(text: string) {
+  async function send(text: string) {
     const line = text.trim();
-    if (!line) return;
+    if (!line || busy) return;
     const userMsg: ChatMsg = { id: uid(), role: "user", kind: "user", text: line };
     const pend = pendingMsg();
-    const turn = interpretChat(line, state, at, pend?.proposal ?? null);
-
-    if (turn.type === "confirm" && pend?.proposal) {
-      setMsgs((m) => [...m, userMsg]);
-      setInput("");
-      applyProposal(pend.id, pend.proposal);
-      return;
-    }
-
-    if (turn.type === "skip" && pend) {
-      setMsgs((list) => [
-        ...list.map((m) =>
-          m.id === pend.id
-            ? {
-                ...m,
-                kind: "status" as const,
-                status: "skipped" as const,
-                text: "Ok, ignorei.",
-                proposal: undefined,
-                clarifyOptions: undefined,
-              }
-            : m,
-        ),
-        userMsg,
-        statusReply("Descartado. Diz outra coisa do dia quando quiseres."),
-      ]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "revise" && pend) {
-      setMsgs((list) => [
-        ...list.map((m) =>
-          m.id === pend.id
-            ? {
-                ...m,
-                kind: "status" as const,
-                status: "skipped" as const,
-                text: `Actualizado (${turn.tip}).`,
-                proposal: undefined,
-              }
-            : m,
-        ),
-        userMsg,
-        proposalReply(turn.proposal, `Actualizei (${turn.tip}):`),
-      ]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "orphan_fix") {
-      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "info") {
-      setMsgs((m) => [...m, userMsg, infoReply(turn.text)]);
-      setInput("");
-      return;
-    }
-
-    if (turn.type === "clarify") {
-      setMsgs((list) => [...clearPending(list), userMsg, clarifyReply(turn.text, turn.options)]);
-      setInput("");
-      return;
-    }
-
-    const proposal = turn.type === "fresh" ? turn.proposal : null;
-    if (!proposal) {
-      setInput("");
-      return;
-    }
-
-    setMsgs((list) => [...clearPending(list), userMsg, proposalReply(proposal)]);
+    setMsgs((m) => [...m, userMsg]);
     setInput("");
+    setBusy(true);
+    try {
+      const turn = await interpretAssistant(line, state, at, pend?.proposal ?? null);
+
+      if (turn.type === "confirm" && pend?.proposal) {
+        applyProposal(pend.id, pend.proposal);
+        return;
+      }
+
+      if (turn.type === "skip" && pend) {
+        setMsgs((list) => [
+          ...list.map((m) =>
+            m.id === pend.id
+              ? {
+                  ...m,
+                  kind: "status" as const,
+                  status: "skipped" as const,
+                  text: "Ok, ignorei.",
+                  proposal: undefined,
+                  clarifyOptions: undefined,
+                }
+              : m,
+          ),
+          statusReply("Descartado. Diz outra coisa do dia quando quiseres."),
+        ]);
+        return;
+      }
+
+      if (turn.type === "revise" && pend) {
+        setMsgs((list) => [
+          ...list.map((m) =>
+            m.id === pend.id
+              ? {
+                  ...m,
+                  kind: "status" as const,
+                  status: "skipped" as const,
+                  text: `Actualizado (${turn.tip}).`,
+                  proposal: undefined,
+                }
+              : m,
+          ),
+          proposalReply(turn.proposal, `Actualizei (${turn.tip}):`),
+        ]);
+        return;
+      }
+
+      if (turn.type === "orphan_fix") {
+        setMsgs((m) => [...m, infoReply(turn.text)]);
+        return;
+      }
+
+      if (turn.type === "info") {
+        setMsgs((m) => [...m, infoReply(turn.text)]);
+        return;
+      }
+
+      if (turn.type === "clarify") {
+        setMsgs((list) => [...clearPending(list), clarifyReply(turn.text, turn.options)]);
+        return;
+      }
+
+      const proposal = turn.type === "fresh" ? turn.proposal : null;
+      if (!proposal) return;
+
+      setMsgs((list) => [...clearPending(list), proposalReply(proposal)]);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function pickClarify(msgId: string, option: ClarifyOption) {
@@ -423,6 +421,10 @@ export function AssistenteFab() {
       });
       return r.ok ? { ok: true } : { ok: false, reason: r.reason };
     }
+    if (a.type === "addNote") {
+      addNote({ at: a.at, title: a.title, body: a.body });
+      return { ok: true };
+    }
     return { ok: false, reason: "Acção desconhecida." };
   }
 
@@ -492,7 +494,7 @@ export function AssistenteFab() {
                   <p className="mb-2 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
                     Atalhos
                   </p>
-                  <ChipRow onPick={send} disabled={pending} />
+                  <ChipRow onPick={send} disabled={pending || busy} />
                 </div>
               ) : null}
               <div ref={bottomRef} />
@@ -501,7 +503,7 @@ export function AssistenteFab() {
             <div className="shrink-0 border-t border-ink/10 px-3 py-3 sm:px-4">
               {!onlyWelcome ? (
                 <div className="mb-2.5">
-                  <ChipRow onPick={send} disabled={pending} />
+                  <ChipRow onPick={send} disabled={pending || busy} />
                 </div>
               ) : null}
               <form className="flex gap-2" onSubmit={onSubmit}>
@@ -509,9 +511,11 @@ export function AssistenteFab() {
                   ref={inputRef}
                   className="assistente-composer-input"
                   placeholder={
-                    pending
-                      ? "na caixa · foi 25000 · sim…"
-                      : "Emprestei 2000kz… ou um conceito"
+                    busy
+                      ? "A interpretar…"
+                      : pending
+                        ? "na caixa · foi 25000 · sim…"
+                        : "Emprestei 2000kz… ou um conceito"
                   }
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -519,11 +523,12 @@ export function AssistenteFab() {
                   enterKeyHint="send"
                   autoComplete="off"
                   autoCorrect="off"
+                  disabled={busy}
                 />
                 <button
                   type="submit"
                   className="btn-solid shrink-0 px-4 py-2.5 text-base sm:px-3 sm:py-2 sm:text-sm"
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || busy}
                 >
                   →
                 </button>

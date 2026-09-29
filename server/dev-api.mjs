@@ -28,6 +28,11 @@ import {
   sendNotify,
 } from "./notify.mjs";
 import { fetchFromPlural, pluralLinked, authorizePluralHook, syncPluralIntoNeon } from "./plural-bridge.mjs";
+import {
+  assistLlmConfigured,
+  buildAssistCatalog,
+  interpretWithLlm,
+} from "./assist-llm.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -447,6 +452,38 @@ const server = createServer(async (req, res) => {
         return;
       }
       send(res, 200, result, origin);
+      return;
+    }
+    if (url.pathname === "/api/assist/interpret" && req.method === "GET") {
+      send(res, 200, { configured: assistLlmConfigured() }, origin);
+      return;
+    }
+    if (url.pathname === "/api/assist/interpret" && req.method === "POST") {
+      const body = await readBody(req).catch(() => ({}));
+      const text = String(body?.text || "").trim();
+      if (!text) {
+        send(res, 400, { error: "text obrigatório" }, origin);
+        return;
+      }
+      const catalog =
+        typeof body?.catalog === "string" && body.catalog
+          ? body.catalog
+          : buildAssistCatalog(body?.state);
+      const result = await interpretWithLlm({
+        text,
+        catalog,
+        pendingSummary: body?.pendingSummary || null,
+      });
+      if (!result.ok) {
+        send(
+          res,
+          result.configured === false ? 503 : 502,
+          { error: result.error, configured: result.configured !== false },
+          origin,
+        );
+        return;
+      }
+      send(res, 200, { ok: true, intent: result.intent }, origin);
       return;
     }
     send(res, 404, { error: "Not found" }, origin);

@@ -269,6 +269,30 @@ export function cwByCategory(state: AppState, month = state.month) {
   return map;
 }
 
+/** Meses com receita registada nesta empresa (mais recente primeiro). */
+export function monthsWithReceita(state: AppState, entity: EntityId) {
+  const map = new Map<string, number>();
+  for (const m of state.movements) {
+    if (m.entityId !== entity || m.kind !== "receita") continue;
+    const mo = m.at.slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(mo)) continue;
+    map.set(mo, (map.get(mo) ?? 0) + m.amount);
+  }
+  return [...map.entries()]
+    .map(([month, total]) => ({ month, total: roundKz(total) }))
+    .sort((a, b) => b.month.localeCompare(a.month));
+}
+
+/**
+ * Mês a usar no detalhe de receita/custos: o mês do painel se tiver receita;
+ * senão o último mês com faturação (ex. julho com os 86 mil).
+ */
+export function companyDetailMonth(state: AppState, entity: EntityId) {
+  if (receitaMes(state, entity, state.month) > 0) return state.month;
+  const last = monthsWithReceita(state, entity)[0];
+  return last?.month ?? state.month;
+}
+
 export function cwCosts(state: AppState, month = state.month) {
   const map: Record<CostNature, number> = { fixo: 0, variavel: 0, investimento: 0, retirada: 0 };
   for (const m of monthMoves(state, "cw", month)) {

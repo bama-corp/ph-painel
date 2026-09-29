@@ -94,7 +94,8 @@ describe("Passo 8 — schema / migration / export", () => {
     const next = migrate(legacy);
     expect(next.schemaVersion).toBe(SCHEMA_VERSION);
     expect(next.accounts.find((a) => a.id === "cw-bai2")?.opening).toBe(10_711.38);
-    expect(next.parties.find((p) => p.id === "emanuel-cw")?.opening).toBe(89_200);
+    // v9 mete 89.200; v14 limpa de novo.
+    expect(next.parties.find((p) => p.id === "emanuel-cw")?.opening).toBe(0);
     expect(next.accounts.find((a) => a.id === "bai2-p")).toBeUndefined();
   });
 

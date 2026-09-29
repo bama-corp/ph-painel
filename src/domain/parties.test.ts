@@ -75,7 +75,7 @@ describe("Passo 5 — parties / dívidas", () => {
     const s = seedState();
     const p = s.parties.find((x) => x.role === "owner_current");
     expect(p?.id).toBe("emanuel-cw");
-    expect(ownerCurrent(s)).toBe(89_200);
+    expect(ownerCurrent(s)).toBe(0);
   });
 
   it("pagamento rejeitado em party a receber (usar cobrança)", () => {

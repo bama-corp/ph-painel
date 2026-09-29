@@ -140,6 +140,11 @@ export function migrate(state: AppState): AppState {
     parties = parties.filter((p) => !removedPartyIds.includes(p.id));
   }
 
+  // v14 — conta corrente PDS (89.200) a zero: já não conta como saldo a receber.
+  if (fromVersion < 14) {
+    parties = parties.map((p) => (p.id === "emanuel-cw" ? { ...p, opening: 0 } : p));
+  }
+
   const accountIds = new Set(accounts.map((a) => a.id));
   const partyIds = new Set(parties.map((p) => p.id));
   const extraAccounts = seed.accounts.filter((a) => !accountIds.has(a.id));

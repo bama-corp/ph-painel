@@ -29,6 +29,12 @@ export type ReportAction =
       at: string;
       note?: string;
     }
+  | {
+      type: "addNote";
+      title: string;
+      body: string;
+      at: string;
+    }
   | { type: "unknown"; reason: string };
 
 export type ReportProposal = {
@@ -335,6 +341,15 @@ function describeAction(
       detail: `Entra em «${accountLabel(state, action.accountId)}».`,
     };
   }
+  if (action.type === "addNote") {
+    return {
+      summary: `Nota no Caderno · ${action.title}`,
+      detail: action.body.length > 160 ? `${action.body.slice(0, 160)}…` : action.body,
+    };
+  }
+  if (action.type !== "movement") {
+    return { summary: "Proposta", detail: "Revê antes de gravar." };
+  }
   const d = action.draft;
   if (d.kind === "emprestimo_proprietario") {
     const from = d.from.type === "liquidity" ? d.from.id : "?";
@@ -443,6 +458,104 @@ export function answerDefinitionQuestion(text: string): string | null {
     return `Não encontrei «${topic}» no glossário.\nTenta: «como calcular lucro?», «o que é custódia?», «como calcular um pró-labore?».\n\n— Caderno · Glossário`;
   }
   return formatManualAnswer(hit);
+}
+
+/** «mete no caderno sobre X», «anota no caderno: …», «guarda isto no caderno — título» */
+export function isCadernoNoteIntent(text: string) {
+  const f = fold(text.trim());
+  if (!f) return false;
+  if (parseAmountKz(text) && hasMovementVerb(text)) return false;
+  return (
+    /\b(mete|metes|metas|meta|guarda|anota|coloca|poe|poes|escreve|escreves)\b/.test(f) &&
+    /\bcaderno\b/.test(f)
+  );
+}
+
+/**
+ * Extrai tópico / corpo para nota do Caderno.
+ * Preferência: conteúdo do glossário do tópico; senão texto livre após «:» ou «—».
+ */
+export function parseCadernoNoteIntent(
+  text: string,
+  at: string,
+): ReportProposal | null {
+  if (!isCadernoNoteIntent(text)) return null;
+  const raw = text.trim();
+
+  let topic = "";
+  let freeBody = "";
+
+  const sobre = raw.match(
+    /\b(?:sobre|acerca\s+d[eo]|do\s+t[oó]pico)\s*[:\-]?\s*(.+)$/i,
+  );
+  if (sobre?.[1]) {
+    topic = sobre[1].replace(/^["«]|["»]$/g, "").trim();
+  }
+
+  const colon = raw.match(/caderno\s*[:\-—]\s*(.+)$/i);
+  if (!topic && colon?.[1]) {
+    const rest = colon[1].trim();
+    const parts = rest.split(/\n+/);
+    topic = parts[0]!.trim();
+    freeBody = parts.slice(1).join("\n").trim();
+  }
+
+  if (!topic) {
+    const after = raw.match(
+      /\bcaderno\b(?:\s+(?:isto|isso|aqui))?\s*(?:[:\-—]\s*)?(.+)$/i,
+    );
+    if (after?.[1] && !/^(sobre|acerca|do|da|de|topico|tópico)\b/i.test(after[1].trim())) {
+      topic = after[1].trim();
+    }
+  }
+
+  topic = topic
+    .replace(/^(o\s+t[oó]pico\s+)/i, "")
+    .replace(/[\?\!\.]+$/g, "")
+    .trim();
+
+  if (!topic || topic.length < 2) {
+    return {
+      id: `note-${Date.now().toString(36)}`,
+      line: raw,
+      summary: "Nota no Caderno — falta o tópico",
+      detail:
+        "Diz o tema. Ex.: «Mete no caderno sobre Retiradas do proprietário» ou «Anota no caderno: regra X».",
+      confidence: "low",
+      action: { type: "unknown", reason: "Sem tópico" },
+    };
+  }
+
+  const hit = findManualDefinition(topic);
+  const title = hit?.t ?? topic.slice(0, 80);
+  const body = (freeBody || hit?.d || "").trim();
+
+  if (!body) {
+    return {
+      id: `note-${Date.now().toString(36)}`,
+      line: raw,
+      summary: `Nota «${title}» — sem conteúdo`,
+      detail:
+        `Não encontrei «${topic}» no glossário e não enviaste texto extra.\n` +
+        `Pergunta primeiro «o que é ${topic}?» ou escreve o corpo: «Anota no caderno: ${topic}\\n…texto…».`,
+      confidence: "low",
+      action: { type: "unknown", reason: "Sem corpo" },
+    };
+  }
+
+  return {
+    id: `note-${Date.now().toString(36)}`,
+    line: raw,
+    summary: `Nota no Caderno · ${title}`,
+    detail: body.length > 280 ? `${body.slice(0, 280)}…` : body,
+    confidence: hit ? "high" : "medium",
+    action: {
+      type: "addNote",
+      title,
+      body,
+      at,
+    },
+  };
 }
 
 /** Pergunta de saldo / «quanto tenho» — não é movimento. */
@@ -758,6 +871,10 @@ export function interpretChat(
       },
     };
   }
+
+  // «Mete no caderno sobre …» — antes de glossário/movimento
+  const noteProposal = parseCadernoNoteIntent(trimmed, at);
+  if (noteProposal) return { type: "fresh", proposal: noteProposal };
 
   // Definições do glossário («o que é custódia?»)
   const definition = answerDefinitionQuestion(trimmed);
@@ -1425,5 +1542,6 @@ export function proposalKindLabel(p: ReportProposal): string {
   if (p.action.type === "movement") return KIND_LABEL[p.action.draft.kind as MovementKind];
   if (p.action.type === "payParty") return "Pagamento (party)";
   if (p.action.type === "collectParty") return "Cobrança (party)";
+  if (p.action.type === "addNote") return "Nota no Caderno";
   return "—";
 }

@@ -71,7 +71,7 @@ export function seedState(): AppState {
         entityId: "cw",
         name: "Emanuel — conta corrente",
         side: "receber",
-        opening: 89200,
+        opening: 0,
         ownership: "company",
         linkedEntityId: "pessoal",
         role: "owner_current",
