@@ -4,6 +4,7 @@ import { ENTITY } from "../domain/labels";
 import {
   isoWeekday,
   routinesForWeekday,
+  routinesOfWeekday,
   todayYmd,
   WEEKDAY_LABEL,
   WEEKDAY_SHORT,
@@ -13,7 +14,10 @@ import {
 import { useRoutines } from "../domain/routinesStore";
 import {
   DAY_BLOCK_LABEL,
+  TASK_AREA_LABEL,
   TIMEBOX_PRESETS,
+  WEEKDAY_AREA_FOCUS,
+  type TaskArea,
   type TaskDayBlock,
 } from "../domain/tasks";
 import type { EntityId } from "../domain/types";
@@ -49,10 +53,20 @@ const DAY_BLOCK_OPTIONS: SelectOption<TaskDayBlock>[] = [
   { value: "noite", label: "Noite", tone: "moss" },
 ];
 
+const AREA_OPTIONS: SelectOption<TaskArea>[] = [
+  { value: "", label: "— Área", tone: "soft" },
+  { value: "tecnologia", label: "Tecnologia", tone: "pine" },
+  { value: "negocios", label: "Negócios", tone: "copper" },
+  { value: "financas", label: "Finanças", tone: "moss" },
+  { value: "projeto", label: "Projeto", tone: "ink" },
+  { value: "revisao", label: "Revisão", tone: "soft" },
+];
+
 export function TarefasRotina() {
   const { routines, add, update, remove, spawnToday, syncStatus } = useRoutines();
   const todayWd = isoWeekday();
   const ymd = todayYmd();
+  const todayFocus = WEEKDAY_AREA_FOCUS[todayWd];
 
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -60,13 +74,14 @@ export function TarefasRotina() {
   const [entityId, setEntityId] = useState<EntityId>("pessoal");
   const [timeboxMin, setTimeboxMin] = useState(0);
   const [dayBlock, setDayBlock] = useState<TaskDayBlock>("");
+  const [area, setArea] = useState<TaskArea>(todayFocus.areas[0] ?? "");
   const [focusToday, setFocus] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState("");
   const [spawnMsg, setSpawnMsg] = useState("");
 
   const byDay = useMemo(
-    () => WEEKDAYS.map((d) => ({ day: d, items: routinesForWeekday(routines, d) })),
+    () => WEEKDAYS.map((d) => ({ day: d, items: routinesOfWeekday(routines, d) })),
     [routines],
   );
 
@@ -83,6 +98,7 @@ export function TarefasRotina() {
       timeboxMin,
       dayBlock,
       focusToday,
+      area: area || WEEKDAY_AREA_FOCUS[weekday].areas[0] || undefined,
     });
     if (!r.ok) {
       setErr(r.reason);
@@ -92,6 +108,7 @@ export function TarefasRotina() {
     setNote("");
     setTimeboxMin(0);
     setDayBlock("");
+    setArea(WEEKDAY_AREA_FOCUS[weekday].areas[0] ?? "");
     setFocus(false);
     setShowForm(false);
   }
@@ -108,8 +125,7 @@ export function TarefasRotina() {
   return (
     <div className="page">
       <PageHeader title="Rotina" mark="pine">
-        Tarefas semanais recorrentes. Cada dia da semana gera automaticamente a tarefa
-        correspondente.{" "}
+        Semana por áreas: tech · negócios · projeto · revisão.{" "}
         <Link to="/tarefas" className="border-b border-ink/25 pb-px hover:border-ink">
           Minhas
         </Link>
@@ -117,7 +133,17 @@ export function TarefasRotina() {
 
       <Sep />
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.78rem] text-ink/50">
+      <div className="border-l-2 border-copper pl-3">
+        <p className="text-sm text-ink/70">
+          <span className="uppercase tracking-[0.12em] text-ink/40">{WEEKDAY_LABEL[todayWd]}</span>
+          {" · "}
+          <span className="text-ink">{todayFocus.label}</span>
+          {" · "}
+          <span className="num text-ink/55">{todayFocus.hours}</span>
+        </p>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.78rem] text-ink/50">
         <span>
           Hoje · <span className="text-ink/80">{WEEKDAY_LABEL[todayWd]}</span>
           {todayCount > 0 ? (
@@ -146,13 +172,14 @@ export function TarefasRotina() {
           <h2 className="section-title">Semana</h2>
         </div>
         <p className="mt-2 max-w-2xl text-sm text-ink/55">
-          Define o que se repete em cada dia. Em {ymd}, as activas de{" "}
-          {WEEKDAY_LABEL[todayWd].toLowerCase()} entram em «Para fazer».
+          Cada dia tem uma área. Em {ymd}, as activas de{" "}
+          {WEEKDAY_LABEL[todayWd].toLowerCase()} entram em «Para fazer» com a área certa.
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           {byDay.map(({ day, items }) => {
             const isToday = day === todayWd;
+            const focus = WEEKDAY_AREA_FOCUS[day];
             return (
               <div
                 key={day}
@@ -171,6 +198,9 @@ export function TarefasRotina() {
                   </h3>
                   <span className="num text-[0.65rem] text-ink/35">{items.length}</span>
                 </div>
+                <p className="mt-1 text-[0.65rem] uppercase tracking-[0.1em] text-ink/40">
+                  {focus.label} · {focus.hours}
+                </p>
                 <ul className="mt-3 space-y-2">
                   {items.length === 0 ? (
                     <li className="text-[0.72rem] text-ink/30">—</li>
@@ -179,28 +209,38 @@ export function TarefasRotina() {
                       <li
                         key={r.id}
                         className={`group border-b border-ink/[0.06] pb-2 ${
-                          r.active ? "" : "opacity-40"
+                          r.active ? "" : "opacity-50"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1">
-                          <button
-                            type="button"
-                            onClick={() => update(r.id, { active: !r.active })}
-                            className="text-left text-[0.8rem] leading-snug text-ink/85 hover:text-ink"
-                            title={r.active ? "Pausar" : "Activar"}
-                          >
+                          <p className="text-left text-[0.8rem] leading-snug text-ink/85">
                             {r.title}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => remove(r.id)}
-                            className="shrink-0 text-[0.65rem] text-ink/25 opacity-0 transition-opacity hover:text-rust group-hover:opacity-100"
-                            aria-label="Apagar"
-                          >
-                            ×
-                          </button>
+                          </p>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => update(r.id, { active: !r.active })}
+                              className="text-[0.65rem] uppercase tracking-[0.1em] text-ink/35 hover:text-ink"
+                              title={r.active ? "Pausar (não gera amanhã)" : "Reactivar"}
+                            >
+                              {r.active ? "Pausar" : "Activar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!window.confirm(`Apagar «${r.title}» da rotina?`)) return;
+                                remove(r.id);
+                              }}
+                              className="text-[0.65rem] text-ink/25 hover:text-rust"
+                              aria-label="Apagar"
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
                         <p className="mt-0.5 text-[0.65rem] text-ink/40">
+                          {!r.active ? "Pausada · " : ""}
+                          {r.area ? `${TASK_AREA_LABEL[r.area]} · ` : ""}
                           {ENTITY[r.entityId]?.short ?? r.entityId}
                           {r.dayBlock ? ` · ${DAY_BLOCK_LABEL[r.dayBlock]}` : ""}
                           {r.timeboxMin > 0 ? ` · ${r.timeboxMin}m` : ""}
@@ -214,6 +254,7 @@ export function TarefasRotina() {
                   type="button"
                   onClick={() => {
                     setWeekday(day);
+                    setArea(WEEKDAY_AREA_FOCUS[day].areas[0] ?? "");
                     setShowForm(true);
                   }}
                   className="mt-3 text-[0.7rem] text-ink/40 hover:text-ink"
@@ -246,7 +287,7 @@ export function TarefasRotina() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex. Treino, rever caixa, standup…"
+              placeholder="Ex. Bloco Tecnologia, outreach…"
               className="w-full border-b border-ink/20 bg-transparent py-2 text-base text-ink outline-none placeholder:text-ink/30 focus:border-ink"
               autoFocus
             />
@@ -260,10 +301,15 @@ export function TarefasRotina() {
             <div className="flex flex-wrap gap-3">
               <Select
                 value={String(weekday)}
-                onChange={(v) => setWeekday(Number(v) as Weekday)}
+                onChange={(v) => {
+                  const wd = Number(v) as Weekday;
+                  setWeekday(wd);
+                  setArea(WEEKDAY_AREA_FOCUS[wd].areas[0] ?? "");
+                }}
                 options={WEEKDAY_OPTIONS}
                 aria-label="Dia da semana"
               />
+              <Select value={area} onChange={setArea} options={AREA_OPTIONS} aria-label="Área" />
               <Select
                 value={entityId}
                 onChange={setEntityId}

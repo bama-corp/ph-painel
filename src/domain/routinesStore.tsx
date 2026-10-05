@@ -26,7 +26,7 @@ import {
   pushRemoteRoutine,
   pushRemoteRoutines,
 } from "./routinesRemote";
-import type { TaskDayBlock } from "./tasks";
+import type { TaskArea, TaskDayBlock } from "./tasks";
 import { focusTodayCount, MAX_FOCUS_TODAY } from "./tasks";
 import { useTasks } from "./tasksStore";
 
@@ -39,6 +39,7 @@ type RoutineDraft = {
   dayBlock?: TaskDayBlock;
   focusToday?: boolean;
   active?: boolean;
+  area?: TaskArea;
 };
 
 export type RoutinesSyncStatus = "local" | "loading" | "synced" | "saving" | "error" | "offline";
@@ -62,6 +63,7 @@ type RoutinesApi = {
         | "active"
         | "entityId"
         | "sortOrder"
+        | "area"
       >
     >,
   ) => { ok: true } | { ok: false; reason: string };
@@ -282,6 +284,7 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
               active: patch.active !== undefined ? patch.active : r.active,
               entityId: patch.entityId !== undefined ? patch.entityId : r.entityId,
               sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : r.sortOrder,
+              area: patch.area !== undefined ? patch.area : r.area,
             })
           : r,
       );
@@ -335,6 +338,7 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
         timeboxMin: r.timeboxMin,
         dayBlock: r.dayBlock,
         routineId: r.id,
+        area: r.area || undefined,
       });
       if (result.ok) {
         created += 1;

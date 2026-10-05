@@ -18,6 +18,15 @@ export type TaskQuadrant = "fazer" | "agendar" | "delegar" | "eliminar" | "";
 /** Bloco do dia (time blocking leve) */
 export type TaskDayBlock = "" | "manha" | "tarde" | "noite";
 
+/** Área da rotina semanal — o que fazes em cada dia */
+export type TaskArea =
+  | ""
+  | "tecnologia"
+  | "negocios"
+  | "financas"
+  | "projeto"
+  | "revisao";
+
 export type TaskSubtask = {
   id: string;
   title: string;
@@ -41,10 +50,75 @@ export type Task = {
   dayBlock: TaskDayBlock;
   /** Origem: id da rotina semanal (vazio se ad-hoc) */
   routineId: string;
+  /** Conjunto / projecto (ex. js-outubro-2026). Vazio = solta. */
+  bundle: string;
+  /** Área: tecnologia / negócios / finanças / projeto / revisão */
+  area: TaskArea;
   /** Checklist 1 nível */
   subtasks: TaskSubtask[];
   /** ISO — merge local↔remoto */
   updatedAt: string;
+};
+
+/** Rótulos dos conjuntos conhecidos. */
+export const TASK_BUNDLE_LABEL: Record<string, string> = {
+  "js-outubro-2026": "JS · Outubro 2026",
+};
+
+export function bundleLabel(bundle: string): string {
+  if (!bundle) return "";
+  return TASK_BUNDLE_LABEL[bundle] ?? bundle;
+}
+
+export const TASK_AREA_LABEL: Record<Exclude<TaskArea, "">, string> = {
+  tecnologia: "Tecnologia",
+  negocios: "Negócios",
+  financas: "Finanças",
+  projeto: "Projeto",
+  revisao: "Revisão",
+};
+
+export const TASK_AREAS: Exclude<TaskArea, "">[] = [
+  "tecnologia",
+  "negocios",
+  "financas",
+  "projeto",
+  "revisao",
+];
+
+export function areaLabel(area: TaskArea): string {
+  if (!area) return "";
+  return TASK_AREA_LABEL[area] ?? area;
+}
+
+export function normalizeArea(raw: unknown): TaskArea {
+  if (
+    raw === "tecnologia" ||
+    raw === "negocios" ||
+    raw === "financas" ||
+    raw === "projeto" ||
+    raw === "revisao"
+  ) {
+    return raw;
+  }
+  return "";
+}
+
+/**
+ * Foco da rotina semanal (0=seg … 6=dom).
+ * Seg/Ter/Qui tech · Qua negócios · Sex projeto · Sáb projeto+negócio · Dom revisão.
+ */
+export const WEEKDAY_AREA_FOCUS: Record<
+  0 | 1 | 2 | 3 | 4 | 5 | 6,
+  { areas: Exclude<TaskArea, "">[]; hours: string; label: string }
+> = {
+  0: { areas: ["tecnologia"], hours: "2h", label: "Tecnologia" },
+  1: { areas: ["tecnologia"], hours: "2h", label: "Tecnologia" },
+  2: { areas: ["negocios"], hours: "2h", label: "Negócios + vendas" },
+  3: { areas: ["tecnologia"], hours: "2h", label: "Tecnologia" },
+  4: { areas: ["projeto"], hours: "2h", label: "Projeto" },
+  5: { areas: ["projeto", "negocios"], hours: "3–4h", label: "Projeto + negócio" },
+  6: { areas: ["revisao"], hours: "30–60 min", label: "Revisão" },
 };
 
 export const TASKS_STORAGE_KEY = "ph-tarefas-v2";
@@ -209,6 +283,8 @@ export function createTask(
     timeboxMin?: number;
     dayBlock?: TaskDayBlock;
     routineId?: string;
+    bundle?: string;
+    area?: TaskArea;
     subtasks?: TaskSubtask[];
   },
   at = new Date().toISOString().slice(0, 10),
@@ -226,6 +302,8 @@ export function createTask(
     timeboxMin: normalizeTimebox(draft.timeboxMin ?? 0),
     dayBlock: draft.dayBlock ?? "",
     routineId: (draft.routineId ?? "").trim(),
+    bundle: (draft.bundle ?? "").trim(),
+    area: normalizeArea(draft.area),
     subtasks: normalizeSubtasks(draft.subtasks ?? []),
     updatedAt: nowIso(),
   };
@@ -255,6 +333,8 @@ export function coerceTask(x: unknown): Task | null {
     timeboxMin: normalizeTimebox(t.timeboxMin ?? t.timebox_min),
     dayBlock: normalizeDayBlock(t.dayBlock ?? t.day_block),
     routineId: typeof t.routineId === "string" ? t.routineId : typeof t.routine_id === "string" ? t.routine_id : "",
+    bundle: typeof t.bundle === "string" ? t.bundle.trim() : "",
+    area: normalizeArea(t.area),
     subtasks: normalizeSubtasks(t.subtasks),
     updatedAt,
   };
@@ -303,6 +383,55 @@ export function saveTasks(tasks: Task[]) {
 
 export function tasksOf(tasks: Task[], entityId: EntityId) {
   return tasks.filter((t) => t.entityId === entityId);
+}
+
+/** Conjuntos presentes nesta entidade (com contagem de abertas). */
+export function bundlesOf(tasks: Task[], entityId: EntityId): { id: string; label: string; open: number }[] {
+  const map = new Map<string, number>();
+  for (const t of tasksOf(tasks, entityId)) {
+    if (!t.bundle || t.status === "feita") continue;
+    map.set(t.bundle, (map.get(t.bundle) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([id, open]) => ({ id, label: bundleLabel(id), open }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt"));
+}
+
+/** Contagem de abertas por área. */
+export function areasOpenCount(
+  tasks: Task[],
+  entityId: EntityId,
+): Record<Exclude<TaskArea, "">, number> {
+  const out: Record<Exclude<TaskArea, "">, number> = {
+    tecnologia: 0,
+    negocios: 0,
+    financas: 0,
+    projeto: 0,
+    revisao: 0,
+  };
+  for (const t of tasksOf(tasks, entityId)) {
+    if (t.status === "feita" || !t.area) continue;
+    out[t.area] += 1;
+  }
+  return out;
+}
+
+/** Agenda do dia: atrasadas + due hoje + marcadas «Hoje». */
+export function tasksForDay(tasks: Task[], entityId: EntityId, today = new Date().toISOString().slice(0, 10)) {
+  return tasksOf(tasks, entityId)
+    .filter((t) => {
+      if (t.status === "feita") return false;
+      if (t.focusToday) return true;
+      if (t.due && (t.due === today || t.due < today)) return true;
+      return false;
+    })
+    .sort((a, b) => {
+      const ua = a.due && a.due < today ? 0 : a.due === today ? 1 : 2;
+      const ub = b.due && b.due < today ? 0 : b.due === today ? 1 : 2;
+      if (ua !== ub) return ua - ub;
+      if (a.focusToday !== b.focusToday) return a.focusToday ? -1 : 1;
+      return (a.due || "").localeCompare(b.due || "") || a.title.localeCompare(b.title, "pt");
+    });
 }
 
 /** Contagem «ainda aberta» (inbox + a fazer + em curso). */

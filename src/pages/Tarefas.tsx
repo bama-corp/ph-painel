@@ -2,8 +2,13 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ENTITY } from "../domain/labels";
 import { formatDatePt } from "../domain/money";
+import { isoWeekday, WEEKDAY_LABEL } from "../domain/routines";
 import {
   DAY_BLOCK_LABEL,
+  areaLabel,
+  areasOpenCount,
+  bundleLabel,
+  bundlesOf,
   entityFromTasksPath,
   focusTodayCount,
   IMPACT_TIER_LABEL,
@@ -15,9 +20,14 @@ import {
   QUADRANT_LABEL,
   rankByImpact,
   STATUS_LABEL,
+  TASK_AREA_LABEL,
+  TASK_AREAS,
   TIMEBOX_PRESETS,
+  WEEKDAY_AREA_FOCUS,
+  tasksForDay,
   tasksOf,
   type Task,
+  type TaskArea,
   type TaskDayBlock,
   type TaskQuadrant,
   type TaskStatus,
@@ -35,6 +45,7 @@ import {
   LIST_PAGE_SIZE,
   markReviewDone,
   markWeeklyReviewDone,
+  todayYmd,
   type TasksVista,
 } from "../domain/tasksReview";
 import { useTasks } from "../domain/tasksStore";
@@ -67,29 +78,69 @@ const DAY_BLOCK_OPTIONS: SelectOption<TaskDayBlock>[] = [
   { value: "noite", label: "Noite", tone: "moss" },
 ];
 
+const AREA_OPTIONS: SelectOption<TaskArea>[] = [
+  { value: "", label: "— Área", tone: "soft" },
+  { value: "tecnologia", label: "Tecnologia", tone: "pine" },
+  { value: "negocios", label: "Negócios", tone: "copper" },
+  { value: "financas", label: "Finanças", tone: "moss" },
+  { value: "projeto", label: "Projeto", tone: "ink" },
+  { value: "revisao", label: "Revisão", tone: "soft" },
+];
+
+type AreaFilter = "" | "hoje" | Exclude<TaskArea, "">;
+
 export function Tarefas() {
   const { ambito } = useParams();
   const entityId = entityFromTasksPath(ambito);
   const meta = ENTITY[entityId];
   const { tasks, add, setStatus, setQuadrant, toggleFocusToday, update, remove } = useTasks();
-  const list = tasksOf(tasks, entityId);
   const focusN = focusTodayCount(tasks, entityId);
-  const review = buildReviewSnapshot(tasks, entityId);
-
-  const [vista, setVista] = useState<TasksVista>("revisao");
+  const listAll = tasksOf(tasks, entityId);
+  const bundles = bundlesOf(tasks, entityId);
+  const areaCounts = areasOpenCount(tasks, entityId);
+  const todayWd = isoWeekday();
+  const todayFocus = WEEKDAY_AREA_FOCUS[todayWd];
+  const [vista, setVista] = useState<TasksVista>("dia");
+  const [areaFilter, setAreaFilter] = useState<AreaFilter>("hoje");
+  const [bundleFilter, setBundleFilter] = useState<string>("");
   const [listaAba, setListaAba] = useState<"principais" | "restantes">("principais");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [due, setDue] = useState("");
   const [quadrant, setQuad] = useState<TaskQuadrant>("");
+  const [area, setArea] = useState<TaskArea>("");
   const [focusToday, setFocus] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState("");
-  const [reviewDone, setReviewDone] = useState(() => isReviewMarkedDone(entityId, review.today));
-  const [weeklyDone, setWeeklyDone] = useState(() =>
-    isWeeklyReviewDone(entityId, review.weekStart),
-  );
+  const [reviewDone, setReviewDone] = useState(() => isReviewMarkedDone(entityId, todayYmd()));
+  const [weeklyDone, setWeeklyDone] = useState(false);
+
+  const activeAreas: Exclude<TaskArea, "">[] =
+    areaFilter === "hoje"
+      ? todayFocus.areas
+      : areaFilter === ""
+        ? []
+        : [areaFilter];
+
+  const list = listAll.filter((t) => {
+    if (bundleFilter && t.bundle !== bundleFilter) return false;
+    if (activeAreas.length > 0 && !activeAreas.includes(t.area as Exclude<TaskArea, "">)) {
+      return false;
+    }
+    return true;
+  });
+  const reviewSource = tasks.filter((t) => {
+    if (t.entityId !== entityId) return true;
+    if (bundleFilter && t.bundle !== bundleFilter) return false;
+    if (activeAreas.length > 0 && !activeAreas.includes(t.area as Exclude<TaskArea, "">)) {
+      return false;
+    }
+    return true;
+  });
+  const review = buildReviewSnapshot(reviewSource, entityId);
+  const dayAgenda = tasksForDay(list, entityId, review.today);
+  const dayFocus = dayAgenda.filter((t) => t.focusToday);
 
   useEffect(() => {
     setReviewDone(isReviewMarkedDone(entityId, review.today));
@@ -98,6 +149,13 @@ export function Tarefas() {
   useEffect(() => {
     setWeeklyDone(isWeeklyReviewDone(entityId, review.weekStart));
   }, [entityId, review.weekStart]);
+
+  useEffect(() => {
+    setBundleFilter("");
+    setAreaFilter("hoje");
+    setVista("dia");
+    setArea(WEEKDAY_AREA_FOCUS[isoWeekday()].areas[0] ?? "");
+  }, [entityId]);
 
   const isMine = entityId === "pessoal";
   const heading = isMine ? "Minhas tarefas" : `Tarefas · ${meta.short}`;
@@ -121,6 +179,11 @@ export function Tarefas() {
       quadrant,
       focusToday,
       status: "inbox",
+      bundle: bundleFilter || undefined,
+      area:
+        area ||
+        (areaFilter !== "" && areaFilter !== "hoje" ? areaFilter : todayFocus.areas[0]) ||
+        undefined,
     });
     if (!r.ok) {
       setErr(r.reason);
@@ -130,6 +193,7 @@ export function Tarefas() {
     setNote("");
     setDue("");
     setQuad("");
+    setArea(todayFocus.areas[0] ?? "");
     setFocus(false);
     setShowForm(false);
   }
@@ -162,6 +226,8 @@ export function Tarefas() {
         | "status"
         | "timeboxMin"
         | "dayBlock"
+        | "bundle"
+        | "area"
         | "subtasks"
       >
     >,
@@ -185,26 +251,42 @@ export function Tarefas() {
     <div className="page">
       <PageHeader title={heading} mark={meta.tone}>
         {isMine
-          ? "Revisão do dia → prioriza → executa no Kanban. Até 3 «Hoje»."
-          : `Pendentes de ${meta.full}. Mesmo ritual; âmbito separado.`}{" "}
+          ? "Dia primeiro. Áreas = a tua semana (tech / negócios / projeto / finanças / revisão)."
+          : `Pendentes de ${meta.full}. Vista do dia primeiro.`}{" "}
         <Link to="/tarefas/sistema" className="border-b border-ink/25 pb-px hover:border-ink">
           Sistema
         </Link>
+        {" · "}
+        <Link to="/tarefas/rotina" className="border-b border-ink/25 pb-px hover:border-ink">
+          Rotina
+        </Link>
       </PageHeader>
+
+      <div className="mt-4 border-l-2 border-copper pl-3">
+        <p className="text-sm text-ink/70">
+          <span className="uppercase tracking-[0.12em] text-ink/40">{WEEKDAY_LABEL[todayWd]}</span>
+          {" · "}
+          <span className="text-ink">{todayFocus.label}</span>
+          {" · "}
+          <span className="num text-ink/55">{todayFocus.hours}</span>
+        </p>
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <p className="text-sm text-ink/45">
           <span className="num text-ink/70">{openCount(tasks, entityId)}</span> abertas
           {" · "}
-          <span className="num text-ink/70">{focusN}</span>/{MAX_FOCUS_TODAY} hoje
+          <span className="num text-ink/70">{focusN}</span>/{MAX_FOCUS_TODAY} foco
+          {" · "}
+          <span className="num text-ink/70">{dayAgenda.length}</span> no dia
         </p>
         <span className="sep-line hidden min-w-[2rem] flex-1 sm:block" />
         <div className="flex gap-1 text-xs uppercase tracking-[0.12em]" role="tablist" aria-label="Vista">
           {(
             [
+              ["dia", "Dia"],
               ["revisao", "Revisão"],
               ["lista", "Lista"],
-              ["dia", "Dia"],
               ["matriz", "Matriz"],
               ["kanban", "Kanban"],
             ] as const
@@ -226,6 +308,9 @@ export function Tarefas() {
               {id === "lista" && listaRestantes.length > 0 ? (
                 <span className="ml-1.5 num text-[0.65rem] text-ink/35">{listaRestantes.length}</span>
               ) : null}
+              {id === "dia" && dayAgenda.length > 0 ? (
+                <span className="ml-1.5 num text-[0.65rem] text-ink/35">{dayAgenda.length}</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -240,6 +325,89 @@ export function Tarefas() {
           {showForm ? "Cancelar" : "Nova tarefa"}
         </button>
       </div>
+
+      <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Área">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={areaFilter === "hoje"}
+          className={`min-h-9 border px-3 text-xs ${
+            areaFilter === "hoje"
+              ? "border-copper text-copper"
+              : "border-ink/15 text-ink/45 hover:border-ink/40"
+          }`}
+          onClick={() => setAreaFilter("hoje")}
+        >
+          Foco de hoje
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={areaFilter === ""}
+          className={`min-h-9 border px-3 text-xs ${
+            areaFilter === ""
+              ? "border-ink text-ink"
+              : "border-ink/15 text-ink/45 hover:border-ink/40"
+          }`}
+          onClick={() => setAreaFilter("")}
+        >
+          Todas as áreas
+        </button>
+        {TASK_AREAS.map((a) => (
+          <button
+            key={a}
+            type="button"
+            role="tab"
+            aria-selected={areaFilter === a}
+            className={`min-h-9 border px-3 text-xs ${
+              areaFilter === a
+                ? "border-ink text-ink"
+                : "border-ink/15 text-ink/45 hover:border-ink/40"
+            }`}
+            onClick={() => setAreaFilter(a)}
+          >
+            {TASK_AREA_LABEL[a]}
+            {areaCounts[a] > 0 ? (
+              <span className="ml-1.5 num text-ink/35">{areaCounts[a]}</span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {bundles.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Conjunto">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={bundleFilter === ""}
+            className={`min-h-9 border px-3 text-xs ${
+              bundleFilter === ""
+                ? "border-ink text-ink"
+                : "border-ink/15 text-ink/45 hover:border-ink/40"
+            }`}
+            onClick={() => setBundleFilter("")}
+          >
+            Todos os conjuntos
+          </button>
+          {bundles.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              role="tab"
+              aria-selected={bundleFilter === b.id}
+              className={`min-h-9 border px-3 text-xs ${
+                bundleFilter === b.id
+                  ? "border-ink text-ink"
+                  : "border-ink/15 text-ink/45 hover:border-ink/40"
+              }`}
+              onClick={() => setBundleFilter(b.id)}
+            >
+              {b.label}
+              <span className="ml-1.5 num text-ink/35">{b.open}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {showForm ? (
         <form onSubmit={onSubmit} className="panel mt-6 max-w-xl space-y-4">
@@ -269,19 +437,23 @@ export function Tarefas() {
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="field-label block">
+              Área
+              <Select value={area} onChange={setArea} options={AREA_OPTIONS} />
+            </label>
+            <label className="field-label block">
               Eisenhower
               <Select value={quadrant} onChange={setQuad} options={QUADRANT_OPTIONS} />
             </label>
-            <label className="field-label block">
-              Prazo (opcional)
-              <input
-                type="date"
-                className="field text-base sm:text-sm"
-                value={due}
-                onChange={(e) => setDue(e.target.value)}
-              />
-            </label>
           </div>
+          <label className="field-label block">
+            Prazo (opcional)
+            <input
+              type="date"
+              className="field text-base sm:text-sm"
+              value={due}
+              onChange={(e) => setDue(e.target.value)}
+            />
+          </label>
           <label className="flex items-center gap-2 text-sm text-ink/60">
             <input
               type="checkbox"
@@ -646,9 +818,32 @@ export function Tarefas() {
         </div>
       ) : vista === "dia" ? (
         <>
+          <section className="mt-8">
+            <p className="eyebrow flex items-center gap-2">
+              <Mark tone="pine" />
+              Agenda · {formatDatePt(review.today)}
+            </p>
+            <p className="mt-2 max-w-xl text-sm text-ink/45">
+              Atrasadas e com prazo hoje aparecem aqui automaticamente. Marca até{" "}
+              {MAX_FOCUS_TODAY} como «Hoje» para o time blocking abaixo.
+            </p>
+            {dayAgenda.length === 0 ? (
+              <p className="mt-6 flex items-center gap-2.5 text-sm text-ink/45">
+                <Mark tone="soft" />
+                Nada para hoje neste filtro
+                {bundleFilter ? ` (${bundleLabel(bundleFilter)})` : ""}.
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-0">
+                {dayAgenda.map((t, i) => (
+                  <TaskRow key={t.id} {...rowProps(t)} listNum={i + 1} />
+                ))}
+              </ul>
+            )}
+          </section>
           <DayBoard
-            focusTasks={review.focus}
-            focusSlotsLeft={review.focusSlotsLeft}
+            focusTasks={dayFocus}
+            focusSlotsLeft={Math.max(0, MAX_FOCUS_TODAY - focusN)}
             selectedId={selectedId ?? undefined}
             onSetBlock={(id, block) => onUpdateTask(id, { dayBlock: block })}
             onSelect={(t) => setSelectedId((cur) => (cur === t.id ? null : t.id))}
@@ -675,7 +870,7 @@ export function Tarefas() {
               );
             })()
           ) : null}
-          <FocusTimer focusTasks={review.focus} />
+          <FocusTimer focusTasks={dayFocus} />
         </>
       ) : vista === "matriz" ? (
         <>
@@ -837,6 +1032,8 @@ function TaskRow({
         | "status"
         | "timeboxMin"
         | "dayBlock"
+        | "bundle"
+        | "area"
         | "subtasks"
       >
     >,
@@ -896,6 +1093,16 @@ function TaskRow({
             {task.focusToday && !feita ? (
               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-pine">
                 Hoje
+              </span>
+            ) : null}
+            {task.area ? (
+              <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-copper">
+                {areaLabel(task.area)}
+              </span>
+            ) : null}
+            {task.bundle ? (
+              <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-ink/40">
+                {bundleLabel(task.bundle)}
               </span>
             ) : null}
             {highlightTwoMin ? (
@@ -968,6 +1175,17 @@ function TaskRow({
             >
               ≤2 min ✓
             </button>
+          ) : null}
+          {!feita ? (
+            <Select
+              inline
+              menuAlign="right"
+              aria-label="Área"
+              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[7.5rem]"
+              value={task.area}
+              onChange={(v) => onUpdate(task.id, { area: v })}
+              options={AREA_OPTIONS}
+            />
           ) : null}
           {!feita ? (
             <Select

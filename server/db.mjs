@@ -53,7 +53,11 @@ export async function ensureTasksSchema(sql) {
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS day_block TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS routine_id TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS subtasks JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS bundle TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS area TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS ph_tasks_entity_idx ON ph_tasks (entity_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS ph_tasks_bundle_idx ON ph_tasks (bundle)`;
+  await sql`CREATE INDEX IF NOT EXISTS ph_tasks_area_idx ON ph_tasks (area)`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS ph_routines (
@@ -71,6 +75,7 @@ export async function ensureTasksSchema(sql) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS area TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_entity_idx ON ph_routines (entity_id)`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_weekday_idx ON ph_routines (weekday)`;
 }
@@ -78,6 +83,7 @@ export async function ensureTasksSchema(sql) {
 const TASK_ENTITIES = new Set(["pessoal", "cw", "rove", "picasso", "ph"]);
 const TASK_QUADRANTS = new Set(["", "fazer", "agendar", "delegar", "eliminar"]);
 const TASK_DAY_BLOCKS = new Set(["", "manha", "tarde", "noite"]);
+const TASK_AREAS = new Set(["", "tecnologia", "negocios", "financas", "projeto", "revisao"]);
 
 /** @returns {{ ok: true, task: object } | { ok: false, error: string }} */
 export function validateTaskInput(raw, { requireId = true } = {}) {
@@ -104,6 +110,9 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
   if (!Number.isFinite(timeboxMin) || timeboxMin < 0) timeboxMin = 0;
   timeboxMin = Math.min(480, Math.round(timeboxMin));
   const routineId = String(raw.routineId ?? raw.routine_id ?? "").trim();
+  const bundle = String(raw.bundle ?? "").trim().slice(0, 64);
+  const area = String(raw.area ?? "").trim();
+  if (!TASK_AREAS.has(area)) return { ok: false, error: "area inválida." };
   const subtasks = normalizeSubtasksInput(raw.subtasks);
   return {
     ok: true,
@@ -120,6 +129,8 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
       timeboxMin,
       dayBlock,
       routineId,
+      bundle,
+      area,
       subtasks,
     },
   };
@@ -142,7 +153,7 @@ function normalizeSubtasksInput(raw) {
 export async function listTasks(sql) {
   const rows = await sql`
     SELECT id, entity_id, title, note, status, quadrant, focus_today, at, due,
-           timebox_min, day_block, routine_id, subtasks, updated_at
+           timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
     FROM ph_tasks
     ORDER BY at DESC, id DESC
   `;
@@ -163,6 +174,8 @@ function rowToTask(row) {
     timeboxMin: Number(row.timebox_min ?? 0),
     dayBlock: row.day_block ?? "",
     routineId: row.routine_id ?? "",
+    bundle: row.bundle ?? "",
+    area: row.area ?? "",
     subtasks: normalizeSubtasksInput(row.subtasks),
     updatedAt:
       row.updated_at instanceof Date
@@ -179,7 +192,7 @@ export async function upsertTask(sql, raw) {
   const rows = await sql`
     INSERT INTO ph_tasks (
       id, entity_id, title, note, status, quadrant, focus_today, at, due,
-      timebox_min, day_block, routine_id, subtasks, updated_at
+      timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
     ) VALUES (
       ${t.id},
       ${t.entityId},
@@ -193,6 +206,8 @@ export async function upsertTask(sql, raw) {
       ${t.timeboxMin},
       ${t.dayBlock},
       ${t.routineId},
+      ${t.bundle || ""},
+      ${t.area || ""},
       ${subtasksJson}::jsonb,
       now()
     )
@@ -208,10 +223,12 @@ export async function upsertTask(sql, raw) {
       timebox_min = EXCLUDED.timebox_min,
       day_block = EXCLUDED.day_block,
       routine_id = EXCLUDED.routine_id,
+      bundle = EXCLUDED.bundle,
+      area = EXCLUDED.area,
       subtasks = EXCLUDED.subtasks,
       updated_at = now()
     RETURNING id, entity_id, title, note, status, quadrant, focus_today, at, due,
-              timebox_min, day_block, routine_id, subtasks, updated_at
+              timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
   `;
   return rowToTask(rows[0]);
 }
@@ -313,6 +330,8 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
   timeboxMin = Math.min(480, Math.round(timeboxMin));
   let sortOrder = Number(raw.sortOrder ?? raw.sort_order ?? 0);
   if (!Number.isFinite(sortOrder)) sortOrder = 0;
+  const area = String(raw.area ?? "").trim();
+  if (!TASK_AREAS.has(area)) return { ok: false, error: "area inválida." };
   return {
     ok: true,
     routine: {
@@ -327,6 +346,7 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
       active: raw.active === undefined ? true : Boolean(raw.active),
       sortOrder: Math.round(sortOrder),
       lastSpawnYmd: String(raw.lastSpawnYmd ?? raw.last_spawn_ymd ?? ""),
+      area,
     },
   };
 }
@@ -344,6 +364,7 @@ function rowToRoutine(row) {
     active: Boolean(row.active),
     sortOrder: Number(row.sort_order ?? 0),
     lastSpawnYmd: row.last_spawn_ymd ?? "",
+    area: row.area ?? "",
     updatedAt:
       row.updated_at instanceof Date
         ? row.updated_at.toISOString()
@@ -354,7 +375,7 @@ function rowToRoutine(row) {
 export async function listRoutines(sql) {
   const rows = await sql`
     SELECT id, entity_id, title, note, weekday, timebox_min, day_block,
-           focus_today, active, sort_order, last_spawn_ymd, updated_at
+           focus_today, active, sort_order, last_spawn_ymd, area, updated_at
     FROM ph_routines
     ORDER BY weekday ASC, sort_order ASC, title ASC, id ASC
   `;
@@ -368,7 +389,7 @@ export async function upsertRoutine(sql, raw) {
   const rows = await sql`
     INSERT INTO ph_routines (
       id, entity_id, title, note, weekday, timebox_min, day_block,
-      focus_today, active, sort_order, last_spawn_ymd, updated_at
+      focus_today, active, sort_order, last_spawn_ymd, area, updated_at
     ) VALUES (
       ${r.id},
       ${r.entityId},
@@ -381,6 +402,7 @@ export async function upsertRoutine(sql, raw) {
       ${r.active},
       ${r.sortOrder},
       ${r.lastSpawnYmd},
+      ${r.area || ""},
       now()
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -394,9 +416,10 @@ export async function upsertRoutine(sql, raw) {
       active = EXCLUDED.active,
       sort_order = EXCLUDED.sort_order,
       last_spawn_ymd = EXCLUDED.last_spawn_ymd,
+      area = EXCLUDED.area,
       updated_at = now()
     RETURNING id, entity_id, title, note, weekday, timebox_min, day_block,
-              focus_today, active, sort_order, last_spawn_ymd, updated_at
+              focus_today, active, sort_order, last_spawn_ymd, area, updated_at
   `;
   return rowToRoutine(rows[0]);
 }

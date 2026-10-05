@@ -45,6 +45,8 @@ type TaskDraft = {
   timeboxMin?: number;
   dayBlock?: Task["dayBlock"];
   routineId?: string;
+  bundle?: string;
+  area?: Task["area"];
 };
 
 export type TasksSyncStatus = "local" | "loading" | "synced" | "saving" | "error" | "offline";
@@ -70,6 +72,8 @@ type TasksApi = {
         | "status"
         | "timeboxMin"
         | "dayBlock"
+        | "bundle"
+        | "area"
         | "subtasks"
       >
     >,
@@ -397,6 +401,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
               status: patch.status !== undefined ? patch.status : t.status,
               timeboxMin: patch.timeboxMin !== undefined ? patch.timeboxMin : t.timeboxMin,
               dayBlock: patch.dayBlock !== undefined ? patch.dayBlock : t.dayBlock,
+              bundle: patch.bundle !== undefined ? patch.bundle.trim() : t.bundle,
+              area: patch.area !== undefined ? patch.area : t.area,
               subtasks:
                 patch.subtasks !== undefined ? normalizeSubtasks(patch.subtasks) : t.subtasks,
             })

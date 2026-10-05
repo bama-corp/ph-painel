@@ -1,5 +1,6 @@
 import type { EntityId } from "./types";
-import type { TaskDayBlock } from "./tasks";
+import type { TaskArea, TaskDayBlock } from "./tasks";
+import { normalizeArea } from "./tasks";
 
 /** 0 = segunda … 6 = domingo */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -16,6 +17,7 @@ export type Routine = {
   active: boolean;
   sortOrder: number;
   lastSpawnYmd: string;
+  area: TaskArea;
   updatedAt: string;
 };
 
@@ -94,6 +96,7 @@ export function createRoutine(draft: {
   focusToday?: boolean;
   active?: boolean;
   sortOrder?: number;
+  area?: TaskArea;
 }): Routine {
   return {
     id: uid(),
@@ -107,6 +110,7 @@ export function createRoutine(draft: {
     active: draft.active === undefined ? true : Boolean(draft.active),
     sortOrder: draft.sortOrder ?? 0,
     lastSpawnYmd: "",
+    area: normalizeArea(draft.area),
     updatedAt: nowIso(),
   };
 }
@@ -137,6 +141,7 @@ export function coerceRoutine(x: unknown): Routine | null {
     active: r.active === undefined ? true : Boolean(r.active),
     sortOrder: Number(r.sortOrder ?? r.sort_order ?? 0) || 0,
     lastSpawnYmd: String(r.lastSpawnYmd ?? r.last_spawn_ymd ?? ""),
+    area: normalizeArea(r.area),
     updatedAt,
   };
 }
@@ -172,5 +177,12 @@ export function mergeRoutines(local: Routine[], remote: Routine[]): Routine[] {
 export function routinesForWeekday(routines: Routine[], weekday: Weekday): Routine[] {
   return routines
     .filter((r) => r.active && r.weekday === weekday)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+}
+
+/** Todas as rotinas do dia (activas + pausadas) — para a grelha da UI. */
+export function routinesOfWeekday(routines: Routine[], weekday: Weekday): Routine[] {
+  return routines
+    .filter((r) => r.weekday === weekday)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
 }
