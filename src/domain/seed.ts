@@ -27,7 +27,7 @@ export function seedState(): AppState {
       { id: "atlantico", entityId: "pessoal", name: "ATLANTICO", kind: "banco", opening: 59500 },
       { id: "stand", entityId: "pessoal", name: "STAND", kind: "stand", opening: 1000000 },
       { id: "caixa-p", entityId: "pessoal", name: "Caixa", kind: "caixa", opening: 1800 },
-      { id: "cofre", entityId: "pessoal", name: "Cofre", kind: "cofre", opening: 0 },
+      { id: "cofre", entityId: "pessoal", name: "Carteira", kind: "cofre", opening: 0 },
       { id: "cw-caixa", entityId: "cw", name: "Caixa PDS", kind: "caixa", opening: 29060 },
       { id: "cw-bai2", entityId: "cw", name: "BAI 2", kind: "banco", opening: 10711.38 },
       { id: "rove-caixa", entityId: "rove", name: "Caixa Plural", kind: "caixa", opening: 72508.78 },

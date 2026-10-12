@@ -13,14 +13,6 @@ import { Mark, PageHeader, Sep } from "../ui/Page";
 /** Ordem: eu primeiro, depois cada empresa. */
 const SECTIONS: EntityId[] = ["pessoal", ...COMPANIES];
 
-/** Contas da PDS — registo separado. */
-const PDS_ACCOUNTS = [
-  { id: "cw-caixa", label: "Caixa PDS" },
-  { id: "cw-bai2", label: "BAI 2" },
-] as const;
-
-type PdsAccountId = (typeof PDS_ACCOUNTS)[number]["id"];
-
 /** Linhas iniciais — evita scroll infinito. */
 const PAGE_SIZE = 15;
 
@@ -71,6 +63,20 @@ function touchesAccount(m: Movement, accountId: string): boolean {
   );
 }
 
+/** Contas de liquidez tocadas neste movimento (para o modo «Todas»). */
+function accountNamesTouched(state: AppState, m: Movement): string {
+  const names: string[] = [];
+  if (m.from.type === "liquidity") {
+    const a = state.accounts.find((x) => x.id === m.from.id);
+    if (a) names.push(a.name);
+  }
+  if (m.to.type === "liquidity") {
+    const a = state.accounts.find((x) => x.id === m.to.id);
+    if (a && !names.includes(a.name)) names.push(a.name);
+  }
+  return names.join(" · ");
+}
+
 function montanteTone(m: Movement, accountId?: string): "in" | "out" | "plain" {
   if (accountId) {
     const toHere = m.to.type === "liquidity" && m.to.id === accountId;
@@ -112,10 +118,16 @@ function saldoAposPorConta(state: AppState, accountId: string): Map<string, numb
 export function Movimentos() {
   const { state, removeMovement } = useStore();
   const [tab, setTab] = useState<EntityId>("pessoal");
-  const [pdsAccount, setPdsAccount] = useState<PdsAccountId>("cw-caixa");
+  /** "" = todas as contas desta entidade */
+  const [accountId, setAccountId] = useState("");
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [err, setErr] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const accountsOfTab = useMemo(
+    () => state.accounts.filter((a) => a.entityId === tab),
+    [state.accounts, tab],
+  );
 
   const counts = useMemo(() => {
     const c = {} as Record<EntityId, number>;
@@ -124,41 +136,43 @@ export function Movimentos() {
     return c;
   }, [state.movements]);
 
-  const pdsCounts = useMemo(() => {
-    const cw = state.movements.filter((m) => m.entityId === "cw");
-    return {
-      "cw-caixa": cw.filter((m) => touchesAccount(m, "cw-caixa")).length,
-      "cw-bai2": cw.filter((m) => touchesAccount(m, "cw-bai2")).length,
-    };
-  }, [state.movements]);
+  const accountCounts = useMemo(() => {
+    const ofEntity = state.movements.filter((m) => m.entityId === tab);
+    const map: Record<string, number> = {};
+    for (const a of accountsOfTab) {
+      map[a.id] = ofEntity.filter((m) => touchesAccount(m, a.id)).length;
+    }
+    return map;
+  }, [state.movements, tab, accountsOfTab]);
 
   const rows = useMemo(() => {
     const ofEntity = state.movements.filter((m) => m.entityId === tab);
-    if (tab !== "cw") return ofEntity;
-    return ofEntity.filter((m) => touchesAccount(m, pdsAccount));
-  }, [state.movements, tab, pdsAccount]);
+    if (!accountId) return ofEntity;
+    return ofEntity.filter((m) => touchesAccount(m, accountId));
+  }, [state.movements, tab, accountId]);
 
   const saldos = useMemo(() => {
-    if (tab === "cw") return saldoAposPorConta(state, pdsAccount);
+    if (accountId) return saldoAposPorConta(state, accountId);
     return saldoAposPorEntidade(state, tab);
-  }, [state, tab, pdsAccount]);
+  }, [state, tab, accountId]);
 
   const shown = rows.slice(0, visible);
   const hasMore = rows.length > visible;
   const meta = ENTITY[tab];
-  const accountScope = tab === "cw" ? pdsAccount : undefined;
-  const pdsLabel = PDS_ACCOUNTS.find((a) => a.id === pdsAccount)?.label ?? pdsAccount;
+  const accountScope = accountId || undefined;
+  const accountLabel =
+    accountsOfTab.find((a) => a.id === accountId)?.name ?? (accountId ? accountId : "Todas");
 
   function selectTab(id: EntityId) {
     setTab(id);
+    setAccountId("");
     setVisible(PAGE_SIZE);
     setConfirmId(null);
     setErr("");
-    if (id === "cw") setPdsAccount("cw-caixa");
   }
 
-  function selectPdsAccount(id: PdsAccountId) {
-    setPdsAccount(id);
+  function selectAccount(id: string) {
+    setAccountId(id);
     setVisible(PAGE_SIZE);
     setConfirmId(null);
     setErr("");
@@ -182,7 +196,7 @@ export function Movimentos() {
   return (
     <div className="page">
       <PageHeader title="Registo">
-        Uma lista de cada vez — Eu e cada empresa. Na PDS: Caixa e BAI 2 separados.
+        Movimentos por entidade e por conta — saldo após acompanha o filtro activo.
       </PageHeader>
       <div className="mt-8">
         <MoveForm defaultEntity={tab} />
@@ -214,25 +228,41 @@ export function Movimentos() {
         })}
       </div>
 
-      {tab === "cw" ? (
-        <div className="page-tabs mt-4" role="tablist" aria-label="Conta PDS">
-          {PDS_ACCOUNTS.map((a) => {
-            const on = pdsAccount === a.id;
-            const n = pdsCounts[a.id];
+      {accountsOfTab.length > 0 ? (
+        <div className="page-tabs mt-4" role="tablist" aria-label="Conta">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={accountId === ""}
+            onClick={() => selectAccount("")}
+            className={`page-tab ${
+              accountId === ""
+                ? "border-b-2 border-ink font-medium text-ink"
+                : "border-b-2 border-transparent text-ink/40 hover:text-ink/70"
+            }`}
+          >
+            Todas
+            {(counts[tab] ?? 0) > 0 ? (
+              <span className="ml-1.5 num text-ink/35">{counts[tab]}</span>
+            ) : null}
+          </button>
+          {accountsOfTab.map((a) => {
+            const on = accountId === a.id;
+            const n = accountCounts[a.id] ?? 0;
             return (
               <button
                 key={a.id}
                 type="button"
                 role="tab"
                 aria-selected={on}
-                onClick={() => selectPdsAccount(a.id)}
+                onClick={() => selectAccount(a.id)}
                 className={`page-tab ${
                   on
                     ? "border-b-2 border-ink font-medium text-ink"
                     : "border-b-2 border-transparent text-ink/40 hover:text-ink/70"
                 }`}
               >
-                {a.label}
+                {a.name}
                 {n > 0 ? <span className="ml-1.5 num text-ink/35">{n}</span> : null}
               </button>
             );
@@ -241,11 +271,11 @@ export function Movimentos() {
       ) : null}
 
       <p className="mt-4 text-xs text-ink/40">
-        {tab === "pessoal"
-          ? "Contas e movimentos pessoais."
-          : tab === "cw"
-            ? `Saldo após = saldo de ${pdsLabel}.`
-            : `Liquidez ${meta.short} · saldo após = caixa desta empresa.`}
+        {accountId
+          ? `Saldo após = saldo de ${accountLabel}.`
+          : tab === "pessoal"
+            ? "Todas as contas pessoais · saldo após = liquidez própria agregada."
+            : `Todas as contas · saldo após = caixa de ${meta.short}.`}
         {tab !== "pessoal" ? (
           <>
             {" "}
@@ -253,7 +283,14 @@ export function Movimentos() {
               Abrir {meta.short}
             </Link>
           </>
-        ) : null}
+        ) : (
+          <>
+            {" "}
+            <Link to="/contas" className="border-b border-ink/20 hover:border-ink">
+              Contas
+            </Link>
+          </>
+        )}
       </p>
 
       {err ? <p className="mt-4 text-sm text-rust">{err}</p> : null}
@@ -263,7 +300,7 @@ export function Movimentos() {
           <p className="flex items-center gap-2.5 py-6 text-sm text-ink/45">
             <Mark tone="soft" />
             Sem movimentos
-            {tab === "cw" ? ` em ${pdsLabel}` : ` em ${sectionTitle(tab)}`}.
+            {accountId ? ` em ${accountLabel}` : ` em ${sectionTitle(tab)}`}.
           </p>
         ) : (
           <>
@@ -282,6 +319,7 @@ export function Movimentos() {
                   {shown.map((m) => {
                     const tone = montanteTone(m, accountScope);
                     const saldo = saldos.get(m.id);
+                    const contas = !accountId ? accountNamesTouched(state, m) : "";
                     return (
                       <tr key={m.id} className="border-b border-ink/[0.06] align-top">
                         <td className="py-3 pr-3">
@@ -290,6 +328,7 @@ export function Movimentos() {
                             {KIND_LABEL[m.kind]}
                             {m.otherEntityId ? ` → ${entityShort(m.otherEntityId)}` : ""}
                             {m.category ? ` · ${m.category}` : ""}
+                            {contas ? ` · ${contas}` : ""}
                           </p>
                         </td>
                         <td className="num whitespace-nowrap py-3 pr-3 text-ink/70">

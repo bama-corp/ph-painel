@@ -78,7 +78,8 @@ export function migrate(state: AppState): AppState {
   const rename: Record<string, string> = {
     "Caixa CW": "Caixa PDS",
     "Caixa Rove+": "Caixa Plural",
-    ATLANTICO: "ATLANTICO — teu",
+    "ATLANTICO — teu": "ATLANTICO",
+    Cofre: "Carteira",
     "CW — conta corrente do proprietário": "PDS — conta corrente do proprietário",
     "Equipamentos CW (PS, PCs, impressoras)": "Equipamentos PDS (PS, PCs, impressoras)",
   };

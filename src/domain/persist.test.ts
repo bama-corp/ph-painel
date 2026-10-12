@@ -142,6 +142,23 @@ describe("Passo 8 — schema / migration / export", () => {
     expect(next.parties.find((p) => p.id === "eduardo-gta")?.heldInAccountId).toBe("atlantico");
   });
 
+  it("migrate tira «— teu» do ATLANTICO e Cofre → Carteira", () => {
+    const base = seedState();
+    const legacy = {
+      ...base,
+      schemaVersion: SCHEMA_VERSION,
+      accounts: base.accounts.map((a) => {
+        if (a.id === "atlantico") return { ...a, name: "ATLANTICO — teu" };
+        if (a.id === "cofre") return { ...a, name: "Cofre" };
+        return a;
+      }),
+    };
+
+    const next = migrate(legacy);
+    expect(next.accounts.find((a) => a.id === "atlantico")?.name).toBe("ATLANTICO");
+    expect(next.accounts.find((a) => a.id === "cofre")?.name).toBe("Carteira");
+  });
+
   it("migrate não ressuscita party removida (ex. Meneza)", () => {
     const base = seedState();
     const legacy = {
