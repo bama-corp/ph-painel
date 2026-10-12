@@ -15,9 +15,12 @@ import {
 import { dueUrgency, dueUrgencyClass, dueUrgencyLabel } from "../domain/tasksReview";
 import { useTasks } from "../domain/tasksStore";
 import { CalendarBoard } from "../ui/CalendarBoard";
+import { PostingCalendarBoard } from "../ui/PostingCalendarBoard";
 import { Select, type SelectOption } from "../ui/Select";
 import { TaskSubtasks } from "../ui/TaskSubtasks";
 import { Mark, PageHeader } from "../ui/Page";
+
+type CalKind = "prazos" | "postagem";
 
 const QUADRANT_OPTIONS: SelectOption<TaskQuadrant>[] = [
   { value: "", label: "— Eisenhower", tone: "soft" },
@@ -42,6 +45,7 @@ const DAY_BLOCK_OPTIONS: SelectOption<TaskDayBlock>[] = [
 
 export function TarefasCalendario() {
   const { tasks, setStatus, setQuadrant, toggleFocusToday, update, remove } = useTasks();
+  const [kind, setKind] = useState<CalKind>("prazos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
@@ -76,7 +80,9 @@ export function TarefasCalendario() {
   return (
     <div className="page">
       <PageHeader title="Calendário" mark="pine">
-        Prazos de Minhas e das empresas num só sítio. Arrasta entre dias.{" "}
+        {kind === "prazos"
+          ? "Prazos de Minhas e das empresas num só sítio. Arrasta entre dias."
+          : "Semana de publicações da marca pessoal — LinkedIn, Instagram e WhatsApp."}{" "}
         <Link to="/tarefas" className="border-b border-ink/25 pb-px hover:border-ink">
           Minhas
         </Link>
@@ -86,48 +92,79 @@ export function TarefasCalendario() {
         </Link>
       </PageHeader>
 
+      <div className="page-tabs mt-8" role="tablist" aria-label="Tipo de calendário">
+        {(
+          [
+            ["prazos", "Prazos"],
+            ["postagem", "Postagem"],
+          ] as const
+        ).map(([id, label]) => {
+          const on = kind === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              className={`page-tab ${on ? "text-ink border-b border-ink -mb-px" : "text-ink/40 hover:text-ink"}`}
+              onClick={() => {
+                setKind(id);
+                setErr("");
+                if (id !== "prazos") setSelectedId(null);
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {err ? <p className="mt-4 text-sm text-rust">{err}</p> : null}
 
-      <CalendarBoard
-        tasks={tasks}
-        selectedId={selectedId ?? undefined}
-        onSetDue={(id, due) => onUpdate(id, { due })}
-        onSelect={(t) => setSelectedId((cur) => (cur === t.id ? null : t.id))}
-        detail={
-          selected ? (
-            <>
-              <p className="eyebrow mb-3 flex items-center gap-2">
-                <Mark tone={ENTITY[selected.entityId].tone} />
-                {ENTITY[selected.entityId].short}
-                {" · "}
-                {selected.due ? `prazo ${formatDatePt(selected.due)}` : "Sem prazo"}
-              </p>
-              <CalTaskRow
-                task={selected}
-                onStatus={onSetStatus}
-                onQuadrant={setQuadrant}
-                onUpdate={onUpdate}
-                onToggleFocus={() => {
-                  const r = toggleFocusToday(selected.id);
-                  if (!r.ok) setErr(r.reason);
-                }}
-                onRemove={() => {
-                  if (!window.confirm(`Apagar «${selected.title}»?`)) return;
-                  remove(selected.id);
-                  setSelectedId(null);
-                }}
-              />
-              <button
-                type="button"
-                className="btn-ghost mt-2 text-xs"
-                onClick={() => setSelectedId(null)}
-              >
-                Fechar
-              </button>
-            </>
-          ) : null
-        }
-      />
+      {kind === "prazos" ? (
+        <CalendarBoard
+          tasks={tasks}
+          selectedId={selectedId ?? undefined}
+          onSetDue={(id, due) => onUpdate(id, { due })}
+          onSelect={(t) => setSelectedId((cur) => (cur === t.id ? null : t.id))}
+          detail={
+            selected ? (
+              <>
+                <p className="eyebrow mb-3 flex items-center gap-2">
+                  <Mark tone={ENTITY[selected.entityId].tone} />
+                  {ENTITY[selected.entityId].short}
+                  {" · "}
+                  {selected.due ? `prazo ${formatDatePt(selected.due)}` : "Sem prazo"}
+                </p>
+                <CalTaskRow
+                  task={selected}
+                  onStatus={onSetStatus}
+                  onQuadrant={setQuadrant}
+                  onUpdate={onUpdate}
+                  onToggleFocus={() => {
+                    const r = toggleFocusToday(selected.id);
+                    if (!r.ok) setErr(r.reason);
+                  }}
+                  onRemove={() => {
+                    if (!window.confirm(`Apagar «${selected.title}»?`)) return;
+                    remove(selected.id);
+                    setSelectedId(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-ghost mt-2 text-xs"
+                  onClick={() => setSelectedId(null)}
+                >
+                  Fechar
+                </button>
+              </>
+            ) : null
+          }
+        />
+      ) : (
+        <PostingCalendarBoard />
+      )}
     </div>
   );
 }

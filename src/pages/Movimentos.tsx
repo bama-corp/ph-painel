@@ -67,11 +67,13 @@ function touchesAccount(m: Movement, accountId: string): boolean {
 function accountNamesTouched(state: AppState, m: Movement): string {
   const names: string[] = [];
   if (m.from.type === "liquidity") {
-    const a = state.accounts.find((x) => x.id === m.from.id);
+    const fromId = m.from.id;
+    const a = state.accounts.find((x) => x.id === fromId);
     if (a) names.push(a.name);
   }
   if (m.to.type === "liquidity") {
-    const a = state.accounts.find((x) => x.id === m.to.id);
+    const toId = m.to.id;
+    const a = state.accounts.find((x) => x.id === toId);
     if (a && !names.includes(a.name)) names.push(a.name);
   }
   return names.join(" · ");
