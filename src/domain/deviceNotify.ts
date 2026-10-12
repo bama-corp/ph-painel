@@ -88,6 +88,7 @@ export async function triggerServerNotify(
     const res = await fetch(`${apiBase()}/api/notify/tasks${q}`, {
       method: "POST",
       headers: apiHeaders(),
+      credentials: "include",
     });
     const data = (await res.json().catch(() => ({}))) as {
       error?: string;

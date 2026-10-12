@@ -21,6 +21,14 @@ import {
   upsertTasksBatch,
 } from "./db.mjs";
 import {
+  authConfigured,
+  authProfile,
+  createSessionToken,
+  sessionCookieHeader,
+  verifyCredentials,
+  readSession,
+} from "./auth.mjs";
+import {
   authorizeNotify,
   buildTasksDigest,
   buildTestNotify,
@@ -63,10 +71,11 @@ async function readBody(req) {
   return JSON.parse(raw);
 }
 
-function send(res, status, body, origin) {
+function send(res, status, body, origin, extraHeaders = {}) {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     ...corsHeaders(origin),
+    ...extraHeaders,
   };
   res.writeHead(status, headers);
   res.end(JSON.stringify(body));
@@ -364,6 +373,85 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Auth pública (login / me / logout)
+  if (url.pathname === "/api/auth/me" && req.method === "GET") {
+    if (!authConfigured()) {
+      send(res, 200, { configured: false, authenticated: true, user: null }, origin);
+      return;
+    }
+    const session = readSession(req);
+    if (!session.ok) {
+      send(res, 200, { configured: true, authenticated: false, user: null }, origin);
+      return;
+    }
+    const profile = authProfile();
+    send(
+      res,
+      200,
+      { configured: true, authenticated: true, user: { name: profile.name, email: profile.email } },
+      origin,
+    );
+    return;
+  }
+  if (url.pathname === "/api/auth/login" && req.method === "POST") {
+    if (!authConfigured()) {
+      send(res, 503, { error: "Auth não configurada no servidor (AUTH_*)." }, origin);
+      return;
+    }
+    const body = await readBody(req).catch(() => ({}));
+    const login = String(body?.login ?? body?.email ?? body?.username ?? "").trim();
+    const password = String(body?.password ?? "");
+    const result = verifyCredentials(login, password);
+    if (!result.ok) {
+      send(res, 401, { error: result.reason }, origin);
+      return;
+    }
+    const token = createSessionToken(result.user);
+    const profile = authProfile();
+    send(
+      res,
+      200,
+      { ok: true, user: { name: profile.name, email: profile.email } },
+      origin,
+      { "Set-Cookie": sessionCookieHeader(token) },
+    );
+    return;
+  }
+  if (url.pathname === "/api/auth/logout" && req.method === "POST") {
+    send(res, 200, { ok: true }, origin, {
+      "Set-Cookie": sessionCookieHeader("", { clear: true }),
+    });
+    return;
+  }
+
+  // Plural webhook — auth própria
+  if (url.pathname === "/api/plural/hook" && req.method === "POST") {
+    const hookAuth = authorizePluralHook(req);
+    if (!hookAuth.ok) {
+      send(res, hookAuth.status, { error: hookAuth.error }, origin);
+      return;
+    }
+    try {
+      const body = await readBody(req).catch(() => ({}));
+      const result = await syncPluralIntoNeon({
+        event: body?.event || "sync",
+        clientId: body?.clientId,
+        clientName: body?.clientName,
+        amount: body?.amount,
+        at: body?.at,
+      });
+      if (!result.ok) {
+        send(res, result.status || 502, { error: result.reason }, origin);
+        return;
+      }
+      send(res, 200, result, origin);
+    } catch (e) {
+      console.error(e);
+      send(res, 500, { error: e.message || "Erro interno" }, origin);
+    }
+    return;
+  }
+
   const auth = authorize(req);
   if (!auth.ok) {
     send(res, auth.status, { error: auth.error }, origin);
@@ -413,27 +501,6 @@ const server = createServer(async (req, res) => {
         return;
       }
       send(res, 200, r.body, origin);
-      return;
-    }
-    if (url.pathname === "/api/plural/hook" && req.method === "POST") {
-      const auth = authorizePluralHook(req);
-      if (!auth.ok) {
-        send(res, auth.status, { error: auth.error }, origin);
-        return;
-      }
-      const body = await readBody(req).catch(() => ({}));
-      const result = await syncPluralIntoNeon({
-        event: body?.event || "sync",
-        clientId: body?.clientId,
-        clientName: body?.clientName,
-        amount: body?.amount,
-        at: body?.at,
-      });
-      if (!result.ok) {
-        send(res, result.status || 502, { error: result.reason }, origin);
-        return;
-      }
-      send(res, 200, result, origin);
       return;
     }
     if (url.pathname === "/api/plural/sync" && (req.method === "GET" || req.method === "POST")) {

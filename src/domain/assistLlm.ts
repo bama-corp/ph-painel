@@ -43,7 +43,10 @@ function headers(): HeadersInit {
 
 export async function fetchAssistLlmStatus(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/api/assist/interpret`, { headers: headers() });
+    const res = await fetch(`${API_BASE}/api/assist/interpret`, {
+      headers: headers(),
+      credentials: "include",
+    });
     if (!res.ok) return false;
     const data = (await res.json()) as { configured?: boolean };
     return Boolean(data.configured);
@@ -70,6 +73,7 @@ async function fetchLlmIntent(
     const res = await fetch(`${API_BASE}/api/assist/interpret`, {
       method: "POST",
       headers: headers(),
+      credentials: "include",
       body: JSON.stringify({
         text,
         catalog: buildCatalog(state),

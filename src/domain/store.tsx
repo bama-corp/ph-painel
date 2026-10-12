@@ -4,6 +4,7 @@ import {
   applyAddMovement,
   applyAllocate,
   applyDistributeEntry,
+  applyDeallocate,
   applyPartyOpening,
   applyPartyPayment,
   applyPartyCollection,
@@ -99,6 +100,7 @@ type Store = {
   setClient: (id: string, patch: Partial<RoveClient>) => void;
   addClient: (c: Omit<RoveClient, "id">) => void;
   allocate: (parts: { envelopeId: string; amount: number }[]) => AllocateResult;
+  deallocate: (parts: { envelopeId: string; amount: number }[]) => AllocateResult;
   distributeEntry: (amount: number) => AllocateResult;
   addIncomeSource: (draft: Omit<IncomeSource, "id">) => { ok: true; id: string } | { ok: false; reason: string };
   setIncomeSource: (id: string, patch: Partial<Omit<IncomeSource, "id">>) => void;
@@ -397,6 +399,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let result: AllocateResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {
         result = applyAllocate(s, parts);
+        return result.ok ? result.state : s;
+      });
+      return result;
+    },
+    deallocate: (parts) => {
+      let result: AllocateResult = { ok: false, reason: "Estado indisponível.", state };
+      setState((s) => {
+        result = applyDeallocate(s, parts);
         return result.ok ? result.state : s;
       });
       return result;

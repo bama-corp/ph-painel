@@ -10,7 +10,7 @@ import type {
   RecurringCost,
 } from "./types";
 import { SCHEMA_VERSION } from "./types";
-import { roundKz, todayIso } from "./money";
+import { roundKz, todayIso, currentMonthIso } from "./money";
 import { detectBudgetMethodId } from "./definicaoRules";
 
 const BUDGET_BUCKETS = new Set<BudgetBucket>([
@@ -161,10 +161,18 @@ export function migrate(state: AppState): AppState {
       ? state.budgetMethodId
       : detectBudgetMethodId(rules);
 
+  // Mês do painel: se ficou no passado (ex. seed agosto), sobe para o mês civil actual.
+  const nowMonth = currentMonthIso();
+  const month =
+    typeof state.month === "string" && /^\d{4}-\d{2}$/.test(state.month) && state.month >= nowMonth
+      ? state.month
+      : nowMonth;
+
   return {
     ...state,
     schemaVersion: SCHEMA_VERSION,
     asOf: todayIso(),
+    month,
     notes: state.notes ?? [],
     removedPartyIds,
     movements: state.movements ?? [],

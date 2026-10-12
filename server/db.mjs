@@ -3,6 +3,7 @@
  * Usado pela API local e pelas funções Vercel.
  */
 import { neon } from "@neondatabase/serverless";
+import { authConfigured, readSession } from "./auth.mjs";
 
 export function getSql(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) {
@@ -292,21 +293,39 @@ export function corsHeaders(origin) {
     allow.includes(origin) ||
     allow.includes("*") ||
     /^https:\/\/.*\.vercel\.app$/.test(origin ?? "");
+  const allowedOrigin = ok ? origin || allow[0] : allow[0];
   return {
-    "Access-Control-Allow-Origin": ok ? origin || allow[0] : allow[0],
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
   };
 }
 
+/**
+ * Autorização:
+ * 1) Bearer PH_API_KEY (cron / scripts)
+ * 2) Cookie de sessão (login)
+ * 3) Se auth de utilizador NÃO está configurada e não há PH_API_KEY → aberto (dev legado)
+ */
 export function authorize(req) {
-  const key = process.env.PH_API_KEY;
-  if (!key) return { ok: true }; // local sem chave = aberto
+  const key = (process.env.PH_API_KEY || "").trim();
   const header = req.headers?.authorization || req.headers?.Authorization || "";
   const token = String(header).replace(/^Bearer\s+/i, "").trim();
-  if (token && token === key) return { ok: true };
-  return { ok: false, status: 401, error: "Não autorizado." };
+  if (key && token && token === key) return { ok: true, via: "api-key" };
+
+  if (authConfigured()) {
+    const session = readSession(req);
+    if (session.ok) return { ok: true, via: "session", user: session.user };
+    return { ok: false, status: 401, error: "Não autorizado. Faz login." };
+  }
+
+  if (key) {
+    return { ok: false, status: 401, error: "Não autorizado." };
+  }
+  return { ok: true, via: "open" };
 }
 
 /** 0=segunda … 6=domingo */

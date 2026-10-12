@@ -21,7 +21,7 @@ export type RemoteLoad =
 
 export async function fetchRemoteState(): Promise<RemoteLoad> {
   try {
-    const res = await fetch(stateUrl(), { headers: headers() });
+    const res = await fetch(stateUrl(), { headers: headers(), credentials: "include" });
     if (res.status === 404) {
       const body = (await res.json().catch(() => ({}))) as { empty?: boolean };
       return { ok: false, empty: Boolean(body.empty), reason: "Sem snapshot na BD." };
@@ -45,6 +45,7 @@ export async function pushRemoteState(state: AppState): Promise<{ ok: true } | {
     const res = await fetch(stateUrl(), {
       method: "PUT",
       headers: headers(true),
+      credentials: "include",
       body: JSON.stringify({ state }),
     });
     if (!res.ok) {

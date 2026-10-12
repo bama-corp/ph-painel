@@ -65,6 +65,7 @@ export function Orcamento() {
     setRules,
     setBudgetMethod,
     allocate,
+    deallocate,
     distributeEntry,
     addIncomeSource,
     setIncomeSource,
@@ -157,6 +158,22 @@ export function Orcamento() {
       return;
     }
     const r = allocate([{ envelopeId, amount: roundKz(n) }]);
+    if (!r.ok) {
+      showErr("bolsos", r.reason);
+      return;
+    }
+    setAmounts((a) => ({ ...a, [envelopeId]: "" }));
+    clearErr();
+  }
+
+  function tirarBolso(envelopeId: string) {
+    const raw = amounts[envelopeId] ?? "";
+    const n = Number(String(raw).replace(",", "."));
+    if (!n || n <= 0) {
+      showErr("bolsos", "Indica um valor positivo para tirar do bolso.");
+      return;
+    }
+    const r = deallocate([{ envelopeId, amount: roundKz(n) }]);
     if (!r.ok) {
       showErr("bolsos", r.reason);
       return;
@@ -612,7 +629,7 @@ export function Orcamento() {
                   </p>
                 </div>
                 <label className="field-label form-amount">
-                  Meter (Kz)
+                  Valor (Kz)
                   <input
                     className="field num text-sm font-normal normal-case tracking-normal text-ink"
                     inputMode="decimal"
@@ -622,6 +639,14 @@ export function Orcamento() {
                 </label>
                 <button type="button" className="btn-ghost" onClick={() => meterBolso(e.id)}>
                   Meter
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={saldo <= 0}
+                  onClick={() => tirarBolso(e.id)}
+                >
+                  Tirar
                 </button>
               </li>
             );

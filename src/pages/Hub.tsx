@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../domain/authStore";
 import { Mark } from "../ui/Page";
 
 const MODULES = [
@@ -20,6 +21,14 @@ const MODULES = [
 ] as const;
 
 export function Hub() {
+  const { user, logout, configured } = useAuth();
+  const navigate = useNavigate();
+
+  async function onLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <div className="flex min-h-screen flex-col px-4 pb-16 pt-8 sm:px-12 sm:pt-12 lg:px-16">
       <motion.div
@@ -28,16 +37,30 @@ export function Hub() {
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center"
       >
-        <div className="flex flex-wrap items-end gap-1 sm:gap-1.5">
-          <p className="brand text-[clamp(4.5rem,18vw,8.5rem)] text-ink">PH</p>
-          <img
-            src="/logo.png?v=3"
-            alt=""
-            width={140}
-            height={140}
-            className="-ml-1 mb-[0.15em] h-[clamp(3.5rem,12vw,6rem)] w-auto shrink-0 select-none"
-            decoding="async"
-          />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end gap-1 sm:gap-1.5">
+            <p className="brand text-[clamp(4.5rem,18vw,8.5rem)] text-ink">PH</p>
+            <img
+              src="/logo.png?v=3"
+              alt=""
+              width={140}
+              height={140}
+              className="-ml-1 mb-[0.15em] h-[clamp(3.5rem,12vw,6rem)] w-auto shrink-0 select-none"
+              decoding="async"
+            />
+          </div>
+          {configured && user ? (
+            <div className="mb-3 text-right text-xs text-ink/45">
+              <p className="text-ink/70">{user.name}</p>
+              <button
+                type="button"
+                onClick={() => void onLogout()}
+                className="mt-1 border-b border-ink/20 pb-px hover:border-ink hover:text-ink"
+              >
+                Sair
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 flex max-w-md items-center gap-3">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../domain/authStore";
 import { NAV_LINKS } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
@@ -35,6 +36,8 @@ function SyncBadge() {
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { state, setMonth, reset } = useStore();
+  const { user, logout, configured } = useAuth();
+  const navigate = useNavigate();
   const onEu = pathname === "/eu";
   const navRef = useRef<HTMLElement>(null);
 
@@ -42,6 +45,11 @@ export function Shell({ children }: { children: ReactNode }) {
     const active = navRef.current?.querySelector(".nav-link-active");
     active?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [pathname]);
+
+  async function onLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="min-h-screen">
@@ -130,6 +138,16 @@ export function Shell({ children }: { children: ReactNode }) {
               Repor seed
             </button>
             <SyncBadge />
+            {configured && user ? (
+              <button
+                type="button"
+                onClick={() => void onLogout()}
+                className="min-h-10 tracking-wide hover:text-ink sm:min-h-0"
+                title={user.email}
+              >
+                Sair
+              </button>
+            ) : null}
           </div>
           <span className="mark mark-soft hidden sm:inline-block" aria-hidden />
         </div>

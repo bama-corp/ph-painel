@@ -27,7 +27,7 @@ function normalizeList(raw: unknown): Routine[] {
 
 export async function fetchRemoteRoutines(): Promise<RoutinesRemoteLoad> {
   try {
-    const res = await fetch(routinesUrl(), { headers: headers() });
+    const res = await fetch(routinesUrl(), { headers: headers(), credentials: "include" });
     if (res.status === 503) {
       const body = (await res.json().catch(() => ({}))) as { error?: string; missing?: string };
       return {
@@ -54,6 +54,7 @@ export async function pushRemoteRoutine(
     const res = await fetch(routinesUrl(routine.id), {
       method: "PUT",
       headers: headers(true),
+      credentials: "include",
       body: JSON.stringify({ routine }),
     });
     if (!res.ok) {
@@ -75,6 +76,7 @@ export async function deleteRemoteRoutine(
     const res = await fetch(routinesUrl(id), {
       method: "DELETE",
       headers: headers(),
+      credentials: "include",
     });
     if (res.status === 404) return { ok: true };
     if (!res.ok) {
@@ -94,6 +96,7 @@ export async function pushRemoteRoutines(
     const res = await fetch(routinesUrl(), {
       method: "PUT",
       headers: headers(true),
+      credentials: "include",
       body: JSON.stringify({ routines }),
     });
     if (!res.ok) {

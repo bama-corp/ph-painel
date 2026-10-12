@@ -3,8 +3,11 @@ import { Shell } from "./ui/Shell";
 import { TasksShell } from "./ui/TasksShell";
 import { PomodoroProvider } from "./domain/pomodoroStore";
 import { RoutinesProvider } from "./domain/routinesStore";
+import { StoreProvider } from "./domain/store";
 import { TasksProvider } from "./domain/tasksStore";
+import { RequireAuth } from "./ui/RequireAuth";
 import { Hub } from "./pages/Hub";
+import { Login } from "./pages/Login";
 import { Tarefas } from "./pages/Tarefas";
 import { TarefasAlertas } from "./pages/TarefasAlertas";
 import { TarefasCalendario } from "./pages/TarefasCalendario";
@@ -41,38 +44,51 @@ function TasksLayout() {
   );
 }
 
+function ProtectedApp() {
+  return (
+    <RequireAuth>
+      <StoreProvider>
+        <Routes>
+          <Route path="/" element={<Hub />} />
+
+          <Route path="/tarefas" element={<TasksLayout />}>
+            <Route index element={<Tarefas />} />
+            <Route path="calendario" element={<TarefasCalendario />} />
+            <Route path="rotina" element={<TarefasRotina />} />
+            <Route path="alertas" element={<TarefasAlertas />} />
+            <Route path="sistema" element={<TarefasSistema />} />
+            <Route path=":ambito" element={<Tarefas />} />
+          </Route>
+
+          <Route element={<FinanceLayout />}>
+            <Route path="/eu" element={<Eu />} />
+            <Route path="/definicao" element={<Definicao />} />
+            <Route path="/orcamento" element={<Orcamento />} />
+            <Route path="/contas" element={<Contas />} />
+            <Route path="/pds" element={<Cw />} />
+            <Route path="/plural" element={<Rove />} />
+            <Route path="/picasso" element={<Empresa entity="picasso" />} />
+            <Route path="/ph" element={<Empresa entity="ph" />} />
+            <Route path="/cw" element={<Navigate to="/pds" replace />} />
+            <Route path="/rove" element={<Navigate to="/plural" replace />} />
+            <Route path="/movimentos" element={<Movimentos />} />
+            <Route path="/decisao" element={<Decisao />} />
+            <Route path="/caderno" element={<Caderno />} />
+            <Route path="/assistente" element={<Navigate to="/eu" replace />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </StoreProvider>
+    </RequireAuth>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Hub />} />
-
-      <Route path="/tarefas" element={<TasksLayout />}>
-        <Route index element={<Tarefas />} />
-        <Route path="calendario" element={<TarefasCalendario />} />
-        <Route path="rotina" element={<TarefasRotina />} />
-        <Route path="alertas" element={<TarefasAlertas />} />
-        <Route path="sistema" element={<TarefasSistema />} />
-        <Route path=":ambito" element={<Tarefas />} />
-      </Route>
-
-      <Route element={<FinanceLayout />}>
-        <Route path="/eu" element={<Eu />} />
-        <Route path="/definicao" element={<Definicao />} />
-        <Route path="/orcamento" element={<Orcamento />} />
-        <Route path="/contas" element={<Contas />} />
-        <Route path="/pds" element={<Cw />} />
-        <Route path="/plural" element={<Rove />} />
-        <Route path="/picasso" element={<Empresa entity="picasso" />} />
-        <Route path="/ph" element={<Empresa entity="ph" />} />
-        <Route path="/cw" element={<Navigate to="/pds" replace />} />
-        <Route path="/rove" element={<Navigate to="/plural" replace />} />
-        <Route path="/movimentos" element={<Movimentos />} />
-        <Route path="/decisao" element={<Decisao />} />
-        <Route path="/caderno" element={<Caderno />} />
-        <Route path="/assistente" element={<Navigate to="/eu" replace />} />
-      </Route>
-
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/*" element={<ProtectedApp />} />
     </Routes>
   );
 }

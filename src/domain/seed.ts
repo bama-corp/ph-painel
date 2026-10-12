@@ -1,6 +1,6 @@
 import type { AppState } from "./types";
 import { SCHEMA_VERSION } from "./types";
-import { todayIso } from "./money";
+import { currentMonthIso, todayIso } from "./money";
 
 /**
  * Snapshot actualizado 19 set 2026.
@@ -12,7 +12,7 @@ export function seedState(): AppState {
   return {
     schemaVersion: SCHEMA_VERSION,
     asOf: todayIso(),
-    month: "2026-08",
+    month: currentMonthIso(),
     rules: {
       obrigacoes: 30,
       reserva: 20,

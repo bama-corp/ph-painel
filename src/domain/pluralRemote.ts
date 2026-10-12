@@ -50,7 +50,10 @@ export function setPluralLinkedKnown(linked: boolean) {
 
 export async function fetchPluralStatus(): Promise<boolean> {
   try {
-    const res = await fetch(`${PH_BASE}/api/plural/status`, { headers: phHeaders() });
+    const res = await fetch(`${PH_BASE}/api/plural/status`, {
+      headers: phHeaders(),
+      credentials: "include",
+    });
     if (!res.ok) {
       linkedKnown = false;
       return false;
@@ -161,7 +164,10 @@ function upsertRecurringCost(
 /** Busca summary via proxy do PH (chave Plural só no servidor). */
 export async function fetchPluralSummary(): Promise<PluralFetch> {
   try {
-    const res = await fetch(`${PH_BASE}/api/plural/summary`, { headers: phHeaders() });
+    const res = await fetch(`${PH_BASE}/api/plural/summary`, {
+      headers: phHeaders(),
+      credentials: "include",
+    });
     const body = (await res.json().catch(() => ({}))) as PluralSummary & { error?: string };
     if (res.status === 503) {
       linkedKnown = false;
@@ -195,6 +201,7 @@ export async function requestPluralServerSync(): Promise<
     const res = await fetch(`${PH_BASE}/api/plural/sync`, {
       method: "POST",
       headers: phHeaders(),
+      credentials: "include",
     });
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     if (res.status === 503) {

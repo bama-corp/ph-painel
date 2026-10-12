@@ -27,7 +27,7 @@ function normalizeList(raw: unknown): Task[] {
 
 export async function fetchRemoteTasks(): Promise<TasksRemoteLoad> {
   try {
-    const res = await fetch(tasksUrl(), { headers: headers() });
+    const res = await fetch(tasksUrl(), { headers: headers(), credentials: "include" });
     if (res.status === 503) {
       const body = (await res.json().catch(() => ({}))) as { error?: string; missing?: string };
       return {
@@ -54,6 +54,7 @@ export async function pushRemoteTask(
     const res = await fetch(tasksUrl(task.id), {
       method: "PUT",
       headers: headers(true),
+      credentials: "include",
       body: JSON.stringify({ task }),
     });
     if (!res.ok) {
@@ -75,6 +76,7 @@ export async function deleteRemoteTask(
     const res = await fetch(tasksUrl(id), {
       method: "DELETE",
       headers: headers(),
+      credentials: "include",
     });
     if (res.status === 404) return { ok: true };
     if (!res.ok) {
@@ -95,6 +97,7 @@ export async function pushRemoteTasks(
     const res = await fetch(tasksUrl(), {
       method: "PUT",
       headers: headers(true),
+      credentials: "include",
       body: JSON.stringify({ tasks }),
     });
     if (!res.ok) {

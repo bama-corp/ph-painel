@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocatablePersonal,
   applyAllocate,
+  applyDeallocate,
   applyDistributeEntry,
   custodyLiquidity,
   envelopeOf,
@@ -85,5 +86,28 @@ describe("Passo 3 — Meter / distribuição", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(envelopeOf(r.state, "operacional")).toBe(before + 1);
+  });
+
+  it("Tirar (deallocate) devolve ao alocável e reduz o bolso", () => {
+    const s = seedState();
+    const put = applyAllocate(s, [{ envelopeId: "lazer", amount: 25_000 }]);
+    expect(put.ok).toBe(true);
+    if (!put.ok) return;
+    const availAfterPut = allocatablePersonal(put.state);
+    const take = applyDeallocate(put.state, [{ envelopeId: "lazer", amount: 10_000 }]);
+    expect(take.ok).toBe(true);
+    if (!take.ok) return;
+    expect(envelopeOf(take.state, "lazer")).toBe(15_000);
+    expect(allocatablePersonal(take.state)).toBeCloseTo(availAfterPut + 10_000, 2);
+  });
+
+  it("deallocate rejeita valor acima do saldo do bolso", () => {
+    const s = seedState();
+    const put = applyAllocate(s, [{ envelopeId: "reserva", amount: 5_000 }]);
+    expect(put.ok).toBe(true);
+    if (!put.ok) return;
+    const take = applyDeallocate(put.state, [{ envelopeId: "reserva", amount: 5_001 }]);
+    expect(take.ok).toBe(false);
+    expect(envelopeOf(take.state, "reserva")).toBe(5_000);
   });
 });

@@ -487,7 +487,9 @@ export function fluxoMes(state: AppState, month = state.month) {
     if (m.kind === "reembolso") dividasPagas += m.amount;
     if (m.kind === "interempresa") interempresa += m.amount;
     if (m.kind === "alocacao" && hit(m.to, "envelope", "investimento")) alocadoInvestimento += m.amount;
+    if (m.kind === "alocacao" && hit(m.from, "envelope", "investimento")) alocadoInvestimento -= m.amount;
     if (m.kind === "alocacao" && hit(m.to, "envelope", "reserva")) reservado += m.amount;
+    if (m.kind === "alocacao" && hit(m.from, "envelope", "reserva")) reservado -= m.amount;
   }
 
   return {
@@ -724,6 +726,54 @@ export function applyAllocate(
     entityId: "pessoal" as const,
     envelopeId: p.envelopeId,
     note: "Alocação de bolso",
+  }));
+
+  return { ok: true, state: { ...state, movements: [...extra, ...state.movements] } };
+}
+
+/**
+ * Desaloca: tira do bolso e devolve a «sem função» (allocatable).
+ * Espelho de applyAllocate — from envelope → unallocated.
+ */
+export function applyDeallocate(
+  state: AppState,
+  parts: { envelopeId: string; amount: number }[],
+  opts?: { at?: string; idPrefix?: string },
+): AllocateResult {
+  const cleaned = parts
+    .map((p) => ({ envelopeId: p.envelopeId, amount: roundKz(p.amount) }))
+    .filter((p) => p.amount > 0);
+
+  if (cleaned.length === 0) {
+    return { ok: false, reason: "Nada para desalocar.", state };
+  }
+
+  for (const p of cleaned) {
+    if (!state.envelopes.some((e) => e.id === p.envelopeId)) {
+      return { ok: false, reason: `Bolso desconhecido: ${p.envelopeId}`, state };
+    }
+    const saldo = envelopeOf(state, p.envelopeId);
+    if (p.amount > saldo + 0.001) {
+      return {
+        ok: false,
+        reason: `Bolso «${state.envelopes.find((e) => e.id === p.envelopeId)?.name ?? p.envelopeId}» só tem ${saldo.toLocaleString("pt-PT")} Kz.`,
+        state,
+      };
+    }
+  }
+
+  const at = opts?.at ?? state.asOf;
+  const prefix = opts?.idPrefix ?? "d";
+  const extra: Movement[] = cleaned.map((p, i) => ({
+    id: `${prefix}_${i}_${Date.now().toString(36)}`,
+    at,
+    kind: "alocacao" as const,
+    amount: p.amount,
+    from: { type: "envelope" as const, id: p.envelopeId },
+    to: { type: "unallocated" as const },
+    entityId: "pessoal" as const,
+    envelopeId: p.envelopeId,
+    note: "Desalocação de bolso",
   }));
 
   return { ok: true, state: { ...state, movements: [...extra, ...state.movements] } };
