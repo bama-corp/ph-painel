@@ -4,7 +4,9 @@ import {
   deleteRoutine,
   ensureTasksSchema,
   getTasksSql,
+  listRoutines,
   upsertRoutine,
+  upsertRoutinesBatch,
 } from "../../server/db.mjs";
 
 function getOrigin(req) {
@@ -22,6 +24,9 @@ function json(res, status, body, origin) {
 }
 
 function routineId(req) {
+  const slug = req.query?.slug;
+  if (typeof slug === "string" && slug) return slug;
+  if (Array.isArray(slug) && slug[0]) return String(slug[0]);
   const q = req.query?.id;
   if (typeof q === "string") return q;
   if (Array.isArray(q) && q[0]) return String(q[0]);
@@ -30,6 +35,7 @@ function routineId(req) {
   return m ? decodeURIComponent(m[1]) : "";
 }
 
+/** GET|PUT /api/routines · PUT|DELETE /api/routines/:id */
 export default async function handler(req, res) {
   const origin = getOrigin(req);
   if (req.method === "OPTIONS") {
@@ -60,14 +66,36 @@ export default async function handler(req, res) {
   }
 
   const id = routineId(req);
-  if (!id) {
-    json(res, 400, { error: "id obrigatório." }, origin);
-    return;
-  }
 
   try {
     const sql = getTasksSql();
     await ensureTasksSchema(sql);
+
+    if (!id) {
+      if (req.method === "GET") {
+        const routines = await listRoutines(sql);
+        json(res, 200, { routines }, origin);
+        return;
+      }
+      if (req.method === "PUT") {
+        let body = req.body;
+        if (typeof body === "string") body = JSON.parse(body || "{}");
+        const routines = body?.routines;
+        if (!Array.isArray(routines)) {
+          json(res, 400, { error: "Payload inválido: falta routines[]." }, origin);
+          return;
+        }
+        try {
+          const saved = await upsertRoutinesBatch(sql, routines);
+          json(res, 200, { ok: true, routines: saved }, origin);
+        } catch (e) {
+          json(res, 400, { error: e.message || "Rotinas inválidas." }, origin);
+        }
+        return;
+      }
+      json(res, 405, { error: "Method not allowed" }, origin);
+      return;
+    }
 
     if (req.method === "PUT") {
       let body = req.body;
