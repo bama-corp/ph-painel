@@ -8,3 +8,5 @@ dist
 .env.local
 .env.*.local
 !.env.example
+
+.vercel-auth-env.json

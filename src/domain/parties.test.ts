@@ -124,4 +124,18 @@ describe("Passo 5 — parties / dívidas", () => {
     expect(liquidityOf(r.state, "atlantico")).toBe(460_000);
     expect(custodyInAccount(r.state, "atlantico")).toBe(110_000);
   });
+
+  it("pagamento total zera a party (dívida / custódia / a receber)", () => {
+    const s = seedState();
+    const due = partyOf(s, "tuni-pag");
+    const r = applyPartyPayment(s, {
+      partyId: "tuni-pag",
+      accountId: "bai",
+      amount: due,
+      id: "pay-tuni-full",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(partyOf(r.state, "tuni-pag")).toBe(0);
+  });
 });

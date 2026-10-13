@@ -8,7 +8,6 @@ import {
   applyPartyOpening,
   applyPartyPayment,
   applyPartyCollection,
-  partyHasLedgerMovements,
   partyOf,
   syncDeclaredSalary,
   type AllocateResult,
@@ -58,6 +57,18 @@ function isBudgetBucket(v: string): v is BudgetBucket {
 
 function isCostNature(v: string): v is CostNature {
   return (COST_NATURES as string[]).includes(v);
+}
+
+/** Sai da lista activa quando o saldo vivo chega a ~0 (histórico fica no Registo). */
+function archivePartyIfSettled(state: AppState, partyId: string): AppState {
+  const p = state.parties.find((x) => x.id === partyId);
+  if (!p || p.role === "owner_current") return state;
+  if (partyOf(state, partyId) > 0.001) return state;
+  return {
+    ...state,
+    parties: state.parties.filter((x) => x.id !== partyId),
+    removedPartyIds: [...new Set([...(state.removedPartyIds ?? []), partyId])],
+  };
 }
 
 type PluralSyncInfo = {
@@ -289,7 +300,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {
         result = applyPartyPayment(s, { ...opts, id: uid("m") });
-        return result.ok ? result.state : s;
+        if (!result.ok) return s;
+        return archivePartyIfSettled(result.state, opts.partyId);
       });
       return result;
     },
@@ -297,7 +309,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
       setState((s) => {
         result = applyPartyCollection(s, { ...opts, id: uid("m") });
-        return result.ok ? result.state : s;
+        if (!result.ok) return s;
+        return archivePartyIfSettled(result.state, opts.partyId);
       });
       return result;
     },
@@ -366,14 +379,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           result = { ok: false, reason: "Conta corrente do proprietário não se remove aqui." };
           return s;
         }
-        if (partyHasLedgerMovements(s, id)) {
-          result = { ok: false, reason: "Há movimentos. Zera com pagamento/cobrança, não apagues o histórico." };
-          return s;
-        }
         if (partyOf(s, id) > 0.001) {
-          result = { ok: false, reason: "Saldo ainda positivo. Paga/recebe ou põe opening a 0 primeiro." };
+          result = {
+            ok: false,
+            reason: "Saldo ainda positivo. Paga, recebe ou devolve até zerar — depois podes arquivar.",
+          };
           return s;
         }
+        // Saldo 0: arquivar. Movimentos ficam no registo; a party sai da lista.
         result = { ok: true };
         return {
           ...s,

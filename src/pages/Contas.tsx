@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   canEditPartyOpening,
   custodyInAccount,
@@ -26,6 +26,7 @@ const OWN_LABEL: Record<OwnershipClass, string> = {
 export function Contas() {
   const {
     state,
+    ready,
     setParty,
     setAccountOpening,
     payParty,
@@ -33,12 +34,36 @@ export function Contas() {
     addParty,
     removeParty,
   } = useStore();
-  const receber = state.parties.filter((p) => p.entityId === "pessoal" && p.side === "receber");
+
+  // Uma vez: arquiva dívidas / a receber / custódias já a 0 que ficaram na lista.
+  const cleanedSettled = useRef(false);
+  useEffect(() => {
+    if (!ready || cleanedSettled.current) return;
+    cleanedSettled.current = true;
+    for (const p of state.parties) {
+      if (p.role === "owner_current" || p.unknown) continue;
+      if (partyOf(state, p.id) <= 0.001) removeParty(p.id);
+    }
+  }, [ready, state, removeParty]);
+
+  const isOpenParty = (p: (typeof state.parties)[number]) =>
+    Boolean(p.unknown) || partyOf(state, p.id) > 0.001;
+  const receber = state.parties.filter(
+    (p) => p.entityId === "pessoal" && p.side === "receber" && isOpenParty(p),
+  );
   const dividaPropria = state.parties.filter(
-    (p) => p.entityId === "pessoal" && p.side === "pagar" && p.ownership !== "custody",
+    (p) =>
+      p.entityId === "pessoal" &&
+      p.side === "pagar" &&
+      p.ownership !== "custody" &&
+      isOpenParty(p),
   );
   const custodiaParties = state.parties.filter(
-    (p) => p.entityId === "pessoal" && p.side === "pagar" && p.ownership === "custody",
+    (p) =>
+      p.entityId === "pessoal" &&
+      p.side === "pagar" &&
+      p.ownership === "custody" &&
+      isOpenParty(p),
   );
   const liq = liquidityByEntity(state, "pessoal");
   const teuTotal = personalOwnLiquidity(state);
@@ -436,6 +461,9 @@ function PartyRow({
         </div>
         <div className="sm:text-right">
           <Money n={value} />
+          {value <= 0.001 && !party.unknown ? (
+            <p className="mt-0.5 text-[0.65rem] uppercase tracking-[0.12em] text-pine">Quitado</p>
+          ) : null}
           {canEditOpening ? (
             <input
               className="field num m-0 mt-1 w-full max-w-[8.5rem] py-1 text-right text-sm sm:max-w-none"
@@ -489,12 +517,15 @@ function PartyRow({
         </div>
       ) : (
         <div className="mt-2">
+          <p className="mb-1.5 text-[0.7rem] text-ink/40">
+            Saldo a zero. O histórico de movimentos mantém-se no Registo.
+          </p>
           <button
             type="button"
-            className="min-h-10 text-xs text-ink/40 hover:text-rust sm:min-h-0"
+            className="min-h-10 text-xs text-ink/45 hover:text-rust sm:min-h-0"
             onClick={runRemove}
           >
-            Remover
+            Arquivar
           </button>
         </div>
       )}
