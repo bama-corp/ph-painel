@@ -121,7 +121,7 @@ function parseDueToken(text: string): string | null {
 }
 
 function openTasks(tasks: Task[]) {
-  return tasks.filter((t) => t.status !== "feita");
+  return tasks.filter((t) => t.status !== "feita" && t.bundle !== "eventos");
 }
 
 function matchTasks(tasks: Task[], query: string, entity?: EntityId): Task[] {

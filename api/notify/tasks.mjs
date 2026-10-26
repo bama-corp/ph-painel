@@ -2,6 +2,7 @@ import {
   corsHeaders,
   ensureTasksSchema,
   getTasksSql,
+  listRoutines,
   listTasks,
 } from "../server/db.mjs";
 import {
@@ -106,7 +107,8 @@ export default async function handler(req, res) {
     const sql = getTasksSql();
     await ensureTasksSchema(sql);
     const tasks = await listTasks(sql);
-    const digest = buildTasksDigest(tasks);
+    const routines = await listRoutines(sql);
+    const digest = buildTasksDigest(tasks, { routines });
 
     if (dry) {
       json(res, 200, { ok: true, dry: true, digest, channels }, origin);

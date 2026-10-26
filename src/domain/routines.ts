@@ -186,3 +186,39 @@ export function routinesOfWeekday(routines: Routine[], weekday: Weekday): Routin
     .filter((r) => r.weekday === weekday)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
 }
+
+export function routinesInBlock(routines: Routine[], weekday: Weekday, dayBlock: TaskDayBlock): Routine[] {
+  return routinesOfWeekday(routines, weekday).filter((r) => r.dayBlock === dayBlock);
+}
+
+/**
+ * Move uma rotina para um dia e bloco, na posição `index` (0 = primeira).
+ * Reescreve a ordem do bloco de destino. Devolve a mesma lista se nada mudou.
+ */
+export function placeRoutine(
+  routines: Routine[],
+  id: string,
+  target: { weekday: Weekday; dayBlock: TaskDayBlock; index: number },
+): Routine[] | null {
+  const moving = routines.find((r) => r.id === id);
+  if (!moving) return null;
+
+  const dest = routines
+    .filter((r) => r.id !== id && r.weekday === target.weekday && r.dayBlock === target.dayBlock)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "pt"));
+  const index = Math.max(0, Math.min(target.index, dest.length));
+  const ordered = [...dest.slice(0, index), moving, ...dest.slice(index)];
+  const sortOf = new Map(ordered.map((r, i) => [r.id, i]));
+
+  let changed = false;
+  const next = routines.map((r) => {
+    const sortOrder = sortOf.get(r.id);
+    if (sortOrder === undefined) return r;
+    const weekday = r.id === id ? target.weekday : r.weekday;
+    const dayBlock = r.id === id ? target.dayBlock : r.dayBlock;
+    if (r.weekday === weekday && r.dayBlock === dayBlock && r.sortOrder === sortOrder) return r;
+    changed = true;
+    return touchRoutine({ ...r, weekday, dayBlock, sortOrder });
+  });
+  return changed ? next : routines;
+}

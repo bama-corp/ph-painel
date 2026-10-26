@@ -14,6 +14,7 @@ import {
   isoWeekday,
   loadRoutines,
   mergeRoutines,
+  placeRoutine,
   saveRoutines,
   todayYmd,
   touchRoutine,
@@ -49,6 +50,11 @@ type RoutinesApi = {
   syncStatus: RoutinesSyncStatus;
   syncError: string;
   add: (draft: RoutineDraft) => { ok: true } | { ok: false; reason: string };
+  addMany: (drafts: RoutineDraft[]) => { ok: true; count: number } | { ok: false; reason: string };
+  place: (
+    id: string,
+    target: { weekday: Weekday; dayBlock: TaskDayBlock; index: number },
+  ) => { ok: true } | { ok: false; reason: string };
   update: (
     id: string,
     patch: Partial<
@@ -260,8 +266,44 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
     (draft) => {
       const title = draft.title.trim();
       if (!title) return { ok: false, reason: "Título obrigatório." };
-      const created = createRoutine({ ...draft, title });
+      const block = draft.dayBlock ?? "";
+      const sortOrder = routines.filter((r) => r.weekday === draft.weekday && r.dayBlock === block).length;
+      const created = createRoutine({ ...draft, title, sortOrder });
       persist([created, ...routines], [created.id]);
+      return { ok: true };
+    },
+    [persist, routines],
+  );
+
+  const addMany: RoutinesApi["addMany"] = useCallback(
+    (drafts) => {
+      if (!drafts.length) return { ok: false, reason: "Escolhe pelo menos um dia." };
+      const created: Routine[] = [];
+      const extra = new Map<string, number>();
+      for (const draft of drafts) {
+        const title = draft.title.trim();
+        if (!title) return { ok: false, reason: "Título obrigatório." };
+        const block = draft.dayBlock ?? "";
+        const key = `${draft.weekday}:${block}`;
+        const n = extra.get(key) ?? 0;
+        extra.set(key, n + 1);
+        const sortOrder =
+          routines.filter((r) => r.weekday === draft.weekday && r.dayBlock === block).length + n;
+        created.push(createRoutine({ ...draft, title, sortOrder }));
+      }
+      persist([...created, ...routines], created.map((r) => r.id));
+      return { ok: true, count: created.length };
+    },
+    [persist, routines],
+  );
+
+  const place: RoutinesApi["place"] = useCallback(
+    (id, target) => {
+      const next = placeRoutine(routines, id, target);
+      if (!next) return { ok: false, reason: "Rotina em falta." };
+      if (next === routines) return { ok: true };
+      const dirtyIds = next.filter((r) => routines.find((x) => x.id === r.id) !== r).map((r) => r.id);
+      persist(next, dirtyIds);
       return { ok: true };
     },
     [persist, routines],
@@ -371,12 +413,14 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncError,
       add,
+      addMany,
+      place,
       update,
       remove,
       spawnToday,
       pushNow,
     }),
-    [routines, syncStatus, syncError, add, update, remove, spawnToday, pushNow],
+    [routines, syncStatus, syncError, add, addMany, place, update, remove, spawnToday, pushNow],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

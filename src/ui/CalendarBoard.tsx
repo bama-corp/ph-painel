@@ -17,6 +17,8 @@ type Props = {
   selectedId?: string;
   /** Cartão de detalhe — renderizado na coluna lateral (visível ao clicar). */
   detail?: ReactNode;
+  emptyDayLabel?: string;
+  undatedLabel?: string;
 };
 
 function toIso(y: number, m: number, d: number): string {
@@ -71,7 +73,15 @@ const TILE: Record<"fazer" | "agendar" | "delegar" | "eliminar" | "none", string
   none: "bg-ink/35",
 };
 
-export function CalendarBoard({ tasks, onSetDue, onSelect, selectedId, detail }: Props) {
+export function CalendarBoard({
+  tasks,
+  onSetDue,
+  onSelect,
+  selectedId,
+  detail,
+  emptyDayLabel = "Sem prazos neste dia.",
+  undatedLabel = "Sem data",
+}: Props) {
   const today = todayIso();
   const base = today.match(/^(\d{4})-(\d{2})/)!;
   const [viewY, setViewY] = useState(Number(base[1]));
@@ -271,7 +281,7 @@ export function CalendarBoard({ tasks, onSetDue, onSelect, selectedId, detail }:
               <span className="num text-ink/30">{dayTasks.length}</span>
             </p>
             {focusDay && dayTasks.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/40">Sem prazos neste dia.</p>
+              <p className="mt-3 text-sm text-ink/40">{emptyDayLabel}</p>
             ) : (
               <ul className="mt-3 flex flex-col gap-2">
                 {dayTasks.map((t) => (
@@ -300,7 +310,7 @@ export function CalendarBoard({ tasks, onSetDue, onSelect, selectedId, detail }:
           >
             <p className="eyebrow flex items-center gap-2">
               <Mark tone="soft" />
-              Sem data
+              {undatedLabel}
               <span className="num text-ink/30">{undated.length}</span>
             </p>
             <p className="mt-1 text-[0.72rem] text-ink/40">Arrasta para cá para limpar o prazo.</p>

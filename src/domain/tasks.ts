@@ -60,9 +60,42 @@ export type Task = {
   updatedAt: string;
 };
 
+/** Eventos do calendário — não entram na lista de tarefas. */
+export const EVENT_BUNDLE = "eventos";
+
+export function isEventTask(task: { bundle?: string }): boolean {
+  return task.bundle === EVENT_BUNDLE;
+}
+
+/** Hora e local ficam no início da nota, para não exigir colunas novas. */
+export function parseEventNote(note: string): { time: string; place: string; note: string } {
+  let time = "";
+  let place = "";
+  const rest: string[] = [];
+  for (const line of note.split("\n")) {
+    const hour = line.match(/^@hora\s+(\d{2}:\d{2})\s*$/);
+    const local = line.match(/^@local\s+(.*)$/);
+    if (hour) time = hour[1];
+    else if (local) place = local[1].trim();
+    else rest.push(line);
+  }
+  return { time, place, note: rest.join("\n").trim() };
+}
+
+export function composeEventNote(time: string, place: string, note: string): string {
+  const head: string[] = [];
+  if (/^\d{2}:\d{2}$/.test(time)) head.push(`@hora ${time}`);
+  if (place.trim()) head.push(`@local ${place.trim()}`);
+  const body = note.trim();
+  if (body) head.push(body);
+  return head.join("\n");
+}
+
 /** Rótulos dos conjuntos conhecidos. */
 export const TASK_BUNDLE_LABEL: Record<string, string> = {
   "js-outubro-2026": "JS · Outubro 2026",
+  "js-novembro-2026": "JS · Novembro 2026",
+  [EVENT_BUNDLE]: "Eventos",
 };
 
 export function bundleLabel(bundle: string): string {
@@ -382,7 +415,7 @@ export function saveTasks(tasks: Task[]) {
 }
 
 export function tasksOf(tasks: Task[], entityId: EntityId) {
-  return tasks.filter((t) => t.entityId === entityId);
+  return tasks.filter((t) => t.entityId === entityId && !isEventTask(t));
 }
 
 /** Conjuntos presentes nesta entidade (com contagem de abertas). */

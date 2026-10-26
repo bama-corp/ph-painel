@@ -110,7 +110,11 @@ function resolveArea(t) {
 
   if (BY_ID[t.id]) return { area: BY_ID[t.id], reason: "id-map" };
 
-  if (t.bundle === "js-outubro-2026" || t.id.startsWith("seed-js-2026-")) {
+  if (
+    t.bundle === "js-outubro-2026" ||
+    t.bundle === "js-novembro-2026" ||
+    t.id.startsWith("seed-js-2026-")
+  ) {
     return { area: "tecnologia", reason: "bundle-js" };
   }
   if (t.routineId.includes("tech") || t.id.includes("-tech")) {

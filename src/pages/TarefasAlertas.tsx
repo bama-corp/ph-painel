@@ -73,8 +73,8 @@ export function TarefasAlertas() {
           <h2 className="section-title">Telemóvel · ntfy</h2>
         </div>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink/60">
-          Digest de tarefas (atrasadas, prazo hoje, «Hoje», inbox) chega ao telemóvel. Configuras
-          uma vez no .env e na app.
+          De manhã chegam as tarefas de hoje e a rotina de amanhã. Configuras uma vez no .env e na
+          app.
         </p>
         <ol className="mt-5 max-w-2xl space-y-3 text-sm text-ink/70">
           <li className="flex gap-3 border-b border-ink/[0.07] pb-3">

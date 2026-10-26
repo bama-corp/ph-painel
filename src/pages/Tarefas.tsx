@@ -1128,22 +1128,19 @@ function TaskRow({
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              disabled={feita}
             />
           </div>
           <textarea
             aria-label="Nota"
-            className="mt-1.5 w-full max-w-xl resize-y border-b border-transparent bg-transparent text-sm leading-relaxed text-ink/55 outline-none focus:border-ink/20 disabled:opacity-60"
+            className="mt-1.5 w-full max-w-xl resize-y border-b border-transparent bg-transparent text-sm leading-relaxed text-ink/55 outline-none focus:border-ink/20"
             rows={editNote ? Math.min(4, editNote.split("\n").length + 1) : 1}
-            placeholder={feita ? "" : "Nota…"}
+            placeholder="Nota…"
             value={editNote}
             onChange={(e) => setEditNote(e.target.value)}
             onBlur={commitNote}
-            disabled={feita}
           />
           <TaskSubtasks
             subtasks={task.subtasks ?? []}
-            disabled={feita}
             onChange={(next) => onUpdate(task.id, { subtasks: next })}
           />
           <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.65rem] uppercase tracking-[0.14em] text-ink/35">
@@ -1153,10 +1150,6 @@ function TaskRow({
                 {dueUrgencyLabel(urgency)} · {formatDatePt(task.due)}
               </span>
             ) : null}
-            {/* Em abertas, timebox/bloco/Eisenhower vivem nos selects à direita */}
-            {feita && task.quadrant ? <span>{QUADRANT_LABEL[task.quadrant]}</span> : null}
-            {feita && task.timeboxMin > 0 ? <span>timebox {task.timeboxMin}′</span> : null}
-            {feita && task.dayBlock ? <span>{DAY_BLOCK_LABEL[task.dayBlock]}</span> : null}
             {!feita && (impactRank || task.focusToday) ? (
               <span className={tier === "alto" ? "text-pine" : ""}>
                 {IMPACT_TIER_LABEL[tier]}
@@ -1176,61 +1169,51 @@ function TaskRow({
               ≤2 min ✓
             </button>
           ) : null}
-          {!feita ? (
-            <Select
-              inline
-              menuAlign="right"
-              aria-label="Área"
-              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[7.5rem]"
-              value={task.area}
-              onChange={(v) => onUpdate(task.id, { area: v })}
-              options={AREA_OPTIONS}
-            />
-          ) : null}
-          {!feita ? (
-            <Select
-              inline
-              menuAlign="right"
-              aria-label="Timebox"
-              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[6.75rem]"
-              value={String(task.timeboxMin)}
-              onChange={(v) => onUpdate(task.id, { timeboxMin: Number(v) })}
-              options={TIMEBOX_OPTIONS}
-            />
-          ) : null}
-          {!feita ? (
-            <Select
-              inline
-              menuAlign="right"
-              aria-label="Bloco do dia"
-              className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[5.75rem]"
-              value={task.dayBlock}
-              onChange={(v) => onUpdate(task.id, { dayBlock: v })}
-              options={DAY_BLOCK_OPTIONS}
-            />
-          ) : null}
-          {!feita ? (
-            <Select
-              inline
-              menuAlign="right"
-              aria-label="Eisenhower"
-              className="!min-h-11 w-full !min-w-0 sm:!min-h-0 sm:w-auto sm:flex-none sm:!min-w-[8.5rem]"
-              value={task.quadrant}
-              onChange={(v) => onQuadrant(task.id, v)}
-              options={QUADRANT_OPTIONS}
-            />
-          ) : null}
-          {!feita ? (
-            <button
-              type="button"
-              className={`min-h-11 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs uppercase tracking-[0.12em] sm:min-h-0 sm:flex-none sm:basis-auto sm:px-2 ${
-                task.focusToday ? "text-pine" : "text-ink/40 hover:text-ink"
-              }`}
-              onClick={onToggleFocus}
-            >
-              {task.focusToday ? "Hoje ✓" : "Hoje"}
-            </button>
-          ) : null}
+          <Select
+            inline
+            menuAlign="right"
+            aria-label="Área"
+            className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[7.5rem]"
+            value={task.area}
+            onChange={(v) => onUpdate(task.id, { area: v })}
+            options={AREA_OPTIONS}
+          />
+          <Select
+            inline
+            menuAlign="right"
+            aria-label="Timebox"
+            className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[6.75rem]"
+            value={String(task.timeboxMin)}
+            onChange={(v) => onUpdate(task.id, { timeboxMin: Number(v) })}
+            options={TIMEBOX_OPTIONS}
+          />
+          <Select
+            inline
+            menuAlign="right"
+            aria-label="Bloco do dia"
+            className="!min-h-11 basis-[calc(50%-0.25rem)] !min-w-0 flex-1 sm:!min-h-0 sm:basis-auto sm:flex-none sm:!min-w-[5.75rem]"
+            value={task.dayBlock}
+            onChange={(v) => onUpdate(task.id, { dayBlock: v })}
+            options={DAY_BLOCK_OPTIONS}
+          />
+          <Select
+            inline
+            menuAlign="right"
+            aria-label="Eisenhower"
+            className="!min-h-11 w-full !min-w-0 sm:!min-h-0 sm:w-auto sm:flex-none sm:!min-w-[8.5rem]"
+            value={task.quadrant}
+            onChange={(v) => onQuadrant(task.id, v)}
+            options={QUADRANT_OPTIONS}
+          />
+          <button
+            type="button"
+            className={`min-h-11 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs uppercase tracking-[0.12em] sm:min-h-0 sm:flex-none sm:basis-auto sm:px-2 ${
+              task.focusToday ? "text-pine" : "text-ink/40 hover:text-ink"
+            }`}
+            onClick={onToggleFocus}
+          >
+            {task.focusToday ? "Hoje ✓" : "Hoje"}
+          </button>
           {next ? (
             <button
               type="button"

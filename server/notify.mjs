@@ -142,37 +142,58 @@ function taskLine(t) {
   return `· ${title} — ${label}`;
 }
 
+function isEvent(t) {
+  return t && t.bundle === "eventos";
+}
+
+function isoWeekdayFromYmd(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return (new Date().getDay() + 6) % 7;
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return (date.getDay() + 6) % 7;
+}
+
+const WEEKDAY_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+const DAY_BLOCK_PT = { manha: "Manhã", tarde: "Tarde", noite: "Noite" };
+const BLOCK_RANK = { manha: 0, tarde: 1, noite: 2 };
+
+function addDaysYmd(ymd, days) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  const date = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date();
+  date.setDate(date.getDate() + days);
+  return todayYmd(date);
+}
+
+function routineLine(r) {
+  const title = String(r.title || "").trim() || "(sem título)";
+  const block = DAY_BLOCK_PT[r.dayBlock] || "";
+  const mins = Number(r.timeboxMin) > 0 ? `${r.timeboxMin}m` : "";
+  const label = entityLabel(r.entityId);
+  const extra = [block, mins, label].filter(Boolean).join(" · ");
+  return extra ? `· ${title} — ${extra}` : `· ${title}`;
+}
+
 /**
- * Metadados ntfy a partir dos counts do digest.
- * @param {{ overdue: number, dueToday: number, focus: number, inbox: number }} counts
+ * Metadados ntfy: tarefas de hoje. A rotina vai no corpo, para o dia seguinte.
+ * @param {{ overdue: number, day: number }} counts
  * @param {string} todayYmdStr
  */
 export function digestNotifyMeta(counts, todayYmdStr) {
   const day = formatDayShort(todayYmdStr);
-  let title = `PH · ${day}`;
-  let priority = "default";
-  let tags = "clipboard";
+  let title = `PH · dia limpo · ${day}`;
+  let priority = "low";
+  let tags = "white_check_mark";
 
   if (counts.overdue > 0) {
-    title = `PH · ${counts.overdue} atrasada${counts.overdue === 1 ? "" : "s"}`;
+    title = `PH · ${counts.overdue} atrasada${counts.overdue === 1 ? "" : "s"} · ${day}`;
     priority = "high";
     tags = "warning";
-  } else if (counts.dueToday > 0) {
-    title = `PH · ${counts.dueToday} prazo${counts.dueToday === 1 ? "" : "s"} hoje`;
+  } else if (counts.day > 0) {
+    title = `PH · ${counts.day} tarefa${counts.day === 1 ? "" : "s"} hoje`;
     priority = "default";
-    tags = "calendar";
-  } else if (counts.focus > 0) {
-    title = `PH · ${counts.focus} foco`;
-    priority = "default";
-    tags = "pushpin";
-  } else if (counts.inbox > 0) {
-    title = `PH · ${counts.inbox} inbox`;
-    priority = "default";
-    tags = "inbox_tray";
-  } else {
-    title = `PH · dia limpo · ${day}`;
-    priority = "low";
-    tags = "white_check_mark";
+    tags = "clipboard";
   }
 
   const click = (process.env.NOTIFY_CLICK_URL || "").trim() || undefined;
@@ -180,67 +201,63 @@ export function digestNotifyMeta(counts, todayYmdStr) {
 }
 
 /**
- * @param {Array<{ title?: string, status?: string, due?: string, focusToday?: boolean, entityId?: string }>} tasks
- * @param {{ today?: string }} [opts]
+ * Tarefas de hoje (atrasadas + prazo hoje + «Hoje») e a rotina de amanhã.
+ * A rotina chega no dia anterior ao dia em que se cumpre.
+ * @param {Array<{ title?: string, status?: string, due?: string, focusToday?: boolean, entityId?: string, bundle?: string }>} tasks
+ * @param {{ today?: string, routines?: Array<{ title?: string, weekday?: number, active?: boolean, dayBlock?: string, timeboxMin?: number, entityId?: string, sortOrder?: number }> }} [opts]
  */
 export function buildTasksDigest(tasks, opts = {}) {
   const today = opts.today || todayYmd();
-  const open = (tasks || []).filter((t) => t && t.status !== "feita");
-  const overdue = open.filter((t) => t.due && t.due < today);
-  const dueToday = open.filter((t) => t.due === today);
-  const focus = open.filter((t) => t.focusToday);
-  const inbox = open.filter((t) => t.status === "inbox");
+  const open = (tasks || []).filter((t) => t && t.status !== "feita" && !isEvent(t));
+  const dayTasks = open
+    .filter((t) => t.focusToday || (t.due && t.due <= today))
+    .sort((a, b) => {
+      const ra = a.due && a.due < today ? 0 : a.due === today ? 1 : 2;
+      const rb = b.due && b.due < today ? 0 : b.due === today ? 1 : 2;
+      if (ra !== rb) return ra - rb;
+      if (Boolean(a.focusToday) !== Boolean(b.focusToday)) return a.focusToday ? -1 : 1;
+      return String(a.title || "").localeCompare(String(b.title || ""), "pt");
+    });
+  const overdue = dayTasks.filter((t) => t.due && t.due < today);
+
+  const tomorrowWd = (isoWeekdayFromYmd(today) + 1) % 7;
+  const tomorrowName = WEEKDAY_PT[tomorrowWd] || "Amanhã";
+  const routinesTomorrow = (opts.routines || [])
+    .filter((r) => r && r.active !== false && Number(r.weekday) === tomorrowWd)
+    .sort((a, b) => {
+      const ba = BLOCK_RANK[a.dayBlock] ?? 3;
+      const bb = BLOCK_RANK[b.dayBlock] ?? 3;
+      if (ba !== bb) return ba - bb;
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0) ||
+        String(a.title || "").localeCompare(String(b.title || ""), "pt");
+    });
 
   const counts = {
     overdue: overdue.length,
-    dueToday: dueToday.length,
-    focus: focus.length,
-    inbox: inbox.length,
+    dueToday: dayTasks.filter((t) => t.due === today).length,
+    focus: dayTasks.filter((t) => t.focusToday).length,
+    inbox: 0,
     open: open.length,
+    day: dayTasks.length,
+    routineTomorrow: routinesTomorrow.length,
+    tomorrow: addDaysYmd(today, 1),
   };
 
-  const summaryParts = [];
-  if (counts.overdue) summaryParts.push(`${counts.overdue} atrasada${counts.overdue === 1 ? "" : "s"}`);
-  if (counts.dueToday) summaryParts.push(`${counts.dueToday} prazo${counts.dueToday === 1 ? "" : "s"}`);
-  if (counts.focus) summaryParts.push(`${counts.focus} foco`);
-  if (counts.inbox) summaryParts.push(`${counts.inbox} inbox`);
-
   const lines = [];
-  if (summaryParts.length) {
-    lines.push(summaryParts.join(" · "));
-    lines.push("");
-  }
-
-  if (overdue.length) {
-    lines.push("ATRASADAS");
-    for (const t of overdue.slice(0, 8)) lines.push(taskLine(t));
-    if (overdue.length > 8) lines.push(`· … +${overdue.length - 8}`);
-    lines.push("");
-  }
-
-  if (dueToday.length) {
-    lines.push("PRAZO HOJE");
-    for (const t of dueToday.slice(0, 8)) lines.push(taskLine(t));
-    if (dueToday.length > 8) lines.push(`· … +${dueToday.length - 8}`);
-    lines.push("");
-  }
-
-  if (focus.length) {
-    lines.push("HOJE · FOCO");
-    for (const t of focus.slice(0, 5)) lines.push(taskLine(t));
-    if (focus.length > 5) lines.push(`· … +${focus.length - 5}`);
-    lines.push("");
-  }
-
-  if (inbox.length) {
-    lines.push(`INBOX · ${inbox.length} por esclarecer`);
-    lines.push("");
-  }
-
-  if (!overdue.length && !dueToday.length && !focus.length && !inbox.length) {
-    lines.push("Nada urgente — inbox limpa e sem prazos hoje.");
+  lines.push(`TAREFAS · ${formatDayShort(today)}`);
+  if (!dayTasks.length) {
+    lines.push("· Nenhuma tarefa para hoje.");
   } else {
-    lines.push("Abre Tarefas no painel.");
+    for (const t of dayTasks.slice(0, 12)) lines.push(taskLine(t));
+    if (dayTasks.length > 12) lines.push(`· … +${dayTasks.length - 12}`);
+  }
+  lines.push("");
+  lines.push(`ROTINA · ${tomorrowName}`);
+  if (!routinesTomorrow.length) {
+    lines.push("· Amanhã sem rotina activa.");
+  } else {
+    for (const r of routinesTomorrow.slice(0, 12)) lines.push(routineLine(r));
+    if (routinesTomorrow.length > 12) lines.push(`· … +${routinesTomorrow.length - 12}`);
   }
 
   const meta = digestNotifyMeta(counts, today);

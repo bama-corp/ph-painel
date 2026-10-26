@@ -26,6 +26,7 @@ import {
   type TaskQuadrant,
   type TaskStatus,
 } from "./tasks";
+import { shiftOctoberTechTasks } from "./octoberShift";
 import {
   deleteRemoteTask,
   fetchRemoteTasks,
@@ -106,7 +107,9 @@ function saveIdSet(key: string, set: Set<string>) {
 }
 
 export function TasksProvider({ children }: { children: ReactNode }) {
-  const [tasks, setTasks] = useState<Task[]>(() => stripMockTasks(loadTasks()).tasks);
+  const [tasks, setTasks] = useState<Task[]>(
+    () => shiftOctoberTechTasks(stripMockTasks(loadTasks()).tasks).tasks,
+  );
   const [syncStatus, setSyncStatus] = useState<TasksSyncStatus>("loading");
   const [syncError, setSyncError] = useState("");
   const tasksRef = useRef(tasks);
@@ -271,8 +274,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       setSyncStatus("loading");
-      const local = purgeMocks(loadTasks());
-      persistLocal(local);
+      const localShift = shiftOctoberTechTasks(purgeMocks(loadTasks()));
+      persistLocal(localShift.tasks);
+      if (localShift.changedIds.length) markDirty(localShift.changedIds);
 
       const r = await fetchRemoteTasks();
       if (cancelled) return;
@@ -286,14 +290,20 @@ export function TasksProvider({ children }: { children: ReactNode }) {
           setSyncError(r.reason);
         }
         // Mesmo offline: limpa mocks locais e tenta apagar na BD quando voltar
-        if (pendingDeleteRef.current.size > 0) scheduleFlush();
+        if (pendingDeleteRef.current.size > 0 || localShift.changedIds.length > 0) scheduleFlush();
         return;
       }
-      const merged = purgeMocks(mergeTasks(local, r.tasks, pendingDeleteRef.current));
-      persistLocal(merged);
+      const merged = purgeMocks(mergeTasks(localShift.tasks, r.tasks, pendingDeleteRef.current));
+      const mergedShift = shiftOctoberTechTasks(merged);
+      persistLocal(mergedShift.tasks);
+      if (mergedShift.changedIds.length) markDirty(mergedShift.changedIds);
       setSyncStatus("synced");
       setSyncError("");
-      if (dirtyRef.current.size > 0 || pendingDeleteRef.current.size > 0) {
+      if (
+        dirtyRef.current.size > 0 ||
+        pendingDeleteRef.current.size > 0 ||
+        mergedShift.changedIds.length > 0
+      ) {
         scheduleFlush();
       }
     })();
@@ -302,7 +312,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       if (flushTimer.current) clearTimeout(flushTimer.current);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     };
-  }, [persistLocal, purgeMocks, scheduleFlush]);
+  }, [markDirty, persistLocal, purgeMocks, scheduleFlush]);
 
   const pushNow = useCallback(async () => {
     if (missingConfig.current) return;

@@ -1,13 +1,16 @@
 /**
- * Outubro 2026 — JavaScript operacional (Projeto 2030).
- * 31 dias + marcos semanais + meta do mês. IDs estáveis — reexecutar actualiza.
+ * JavaScript operacional (Projeto 2030).
+ * IDs estáveis de Outubro (`seed-js-2026-2026-10-…`).
+ * A execução fica em Novembro: este script move as datas sem apagar progresso.
+ * O dia 31 cabe em 30 de Novembro.
  *
- * Uso: node scripts/seed-js-outubro-2026.mjs
+ * Uso: npm run seed:js-outubro
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureTasksSchema, getTasksSql, upsertTask } from "../server/db.mjs";
+import { shiftOctoberTechTask } from "../src/domain/octoberShift.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -466,33 +469,105 @@ if (!process.env.TASKS_DATABASE_URL) {
   process.exit(1);
 }
 
+function subtasksOf(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list
+    .filter((s) => s && typeof s === "object")
+    .map((s) => ({
+      id: String(s.id ?? ""),
+      title: String(s.title ?? ""),
+      done: Boolean(s.done),
+    }))
+    .filter((s) => s.title);
+}
+
 const sql = getTasksSql();
 await ensureTasksSchema(sql);
 
-let ok = 0;
+const rows = await sql`
+  SELECT id, title, note, due, bundle, area, subtasks
+  FROM ph_tasks
+  WHERE bundle IN ('js-outubro-2026', 'js-novembro-2026')
+     OR id LIKE 'seed-js-2026-%'
+`;
+
+const existing = new Set();
+let moved = 0;
+for (const row of rows) {
+  existing.add(row.id);
+  const current = {
+    id: row.id,
+    title: row.title,
+    note: row.note ?? "",
+    due: row.due ?? "",
+    bundle: row.bundle ?? "",
+    area: row.area ?? "",
+    subtasks: subtasksOf(row.subtasks),
+  };
+  const shifted = shiftOctoberTechTask(current);
+  if (shifted === current) continue;
+  const subtasksJson = JSON.stringify(shifted.subtasks);
+  await sql`
+    UPDATE ph_tasks SET
+      title = ${shifted.title},
+      note = ${shifted.note},
+      due = ${shifted.due},
+      bundle = ${shifted.bundle},
+      area = ${shifted.area || "tecnologia"},
+      subtasks = ${subtasksJson}::jsonb,
+      updated_at = now()
+    WHERE id = ${shifted.id}
+  `;
+  moved += 1;
+}
+
+let inserted = 0;
 for (const item of ALL) {
+  if (existing.has(item.id)) continue;
+  const shifted = shiftOctoberTechTask({
+    id: item.id,
+    title: item.title,
+    note: item.note ?? "",
+    due: item.due ?? "",
+    bundle: item.bundle ?? "js-outubro-2026",
+    area: item.area ?? "tecnologia",
+    subtasks: item.subtasks ?? [],
+  });
   await upsertTask(sql, {
     id: item.id,
     entityId: item.entityId,
-    title: item.title,
-    note: item.note ?? "",
+    title: shifted.title,
+    note: shifted.note,
     status: item.status ?? "para_fazer",
     quadrant: item.quadrant ?? "agendar",
     focusToday: false,
     at,
-    due: item.due ?? "",
+    due: shifted.due,
     timeboxMin: item.timeboxMin ?? 120,
     dayBlock: item.dayBlock ?? "noite",
     routineId: "",
-    bundle: item.bundle ?? "js-outubro-2026",
-    subtasks: item.subtasks ?? [],
+    bundle: shifted.bundle,
+    area: shifted.area || "tecnologia",
+    subtasks: shifted.subtasks,
   });
-  ok += 1;
+  inserted += 1;
 }
 
-const seeded = await sql`SELECT count(*)::int AS n FROM ph_tasks WHERE id LIKE 'seed-js-2026-%'`;
-console.log("seed_js_outubro_ok", ok);
+const seeded = await sql`
+  SELECT count(*)::int AS n
+  FROM ph_tasks
+  WHERE bundle = 'js-novembro-2026' OR id LIKE 'seed-js-2026-%'
+`;
+const stillOctober = await sql`
+  SELECT count(*)::int AS n
+  FROM ph_tasks
+  WHERE (bundle IN ('js-outubro-2026', 'js-novembro-2026') OR id LIKE 'seed-js-2026-%')
+    AND due LIKE '2026-10-%'
+`;
+console.log("moved", moved);
+console.log("inserted", inserted);
 console.log("dias", DAYS.length);
 console.log("marcos", MILESTONES.length);
 console.log("seed_js_na_bd", seeded[0]?.n ?? 0);
-console.log("Abrir Tarefas → Pessoal · calendário Outubro 2026.");
+console.log("ainda_em_outubro", stillOctober[0]?.n ?? 0);
+console.log("Abrir Tarefas → Pessoal · calendário Novembro 2026.");

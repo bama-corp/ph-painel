@@ -12,7 +12,7 @@
     "db:check": "node scripts/check-env.mjs",
     "notify:tasks": "node scripts/notify-tasks.mjs",
     "notify:test": "node scripts/notify-tasks.mjs --test",
-    "seed:js-outubro": "node scripts/seed-js-outubro-2026.mjs",
+    "seed:js-outubro": "tsx scripts/seed-js-outubro-2026.mjs",
     "seed:rotina": "node scripts/seed-rotina-semanal.mjs",
     "seed:backfill-areas": "node scripts/backfill-task-areas.mjs",
     "build": "tsc --noEmit && vite build",
