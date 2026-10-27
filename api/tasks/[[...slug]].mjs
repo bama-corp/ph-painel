@@ -25,14 +25,20 @@ function json(res, status, body, origin) {
 
 function taskId(req) {
   const slug = req.query?.slug;
-  if (typeof slug === "string" && slug) return slug;
-  if (Array.isArray(slug) && slug[0]) return String(slug[0]);
+  const fromSlug =
+    typeof slug === "string" && slug
+      ? slug
+      : Array.isArray(slug) && slug[0]
+        ? String(slug[0])
+        : "";
+  if (fromSlug) return fromSlug === "__list" ? "" : fromSlug;
   const q = req.query?.id;
-  if (typeof q === "string") return q;
+  if (typeof q === "string" && q) return q;
   if (Array.isArray(q) && q[0]) return String(q[0]);
   const url = req.url || "";
   const m = url.match(/\/api\/tasks\/([^/?#]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
+  const id = m ? decodeURIComponent(m[1]) : "";
+  return id === "__list" ? "" : id;
 }
 
 /** GET|PUT /api/tasks · PUT|DELETE /api/tasks/:id */
