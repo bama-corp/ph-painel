@@ -5,6 +5,7 @@ import { PomodoroProvider } from "./domain/pomodoroStore";
 import { RoutinesProvider } from "./domain/routinesStore";
 import { StoreProvider } from "./domain/store";
 import { TasksProvider } from "./domain/tasksStore";
+import { ConfirmProvider } from "./ui/ConfirmDialog";
 import { RequireAuth } from "./ui/RequireAuth";
 import { Hub } from "./pages/Hub";
 import { Login } from "./pages/Login";
@@ -47,7 +48,8 @@ function TasksLayout() {
 function ProtectedApp() {
   return (
     <RequireAuth>
-      <StoreProvider>
+      <ConfirmProvider>
+        <StoreProvider>
         <Routes>
           <Route path="/" element={<Hub />} />
 
@@ -79,7 +81,8 @@ function ProtectedApp() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </StoreProvider>
+        </StoreProvider>
+      </ConfirmProvider>
     </RequireAuth>
   );
 }

@@ -20,6 +20,7 @@ import {
 import { dueUrgency, dueUrgencyClass, dueUrgencyLabel } from "../domain/tasksReview";
 import { useTasks } from "../domain/tasksStore";
 import { CalendarBoard } from "../ui/CalendarBoard";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { PostingCalendarBoard } from "../ui/PostingCalendarBoard";
 import { Select, type SelectOption } from "../ui/Select";
 import { TaskSubtasks } from "../ui/TaskSubtasks";
@@ -62,6 +63,7 @@ const DAY_BLOCK_OPTIONS: SelectOption<TaskDayBlock>[] = [
 
 export function TarefasCalendario() {
   const { tasks, add, setStatus, setQuadrant, toggleFocusToday, update, remove } = useTasks();
+  const confirm = useConfirm();
   const [kind, setKind] = useState<CalKind>("prazos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -190,9 +192,16 @@ export function TarefasCalendario() {
                     if (!r.ok) setErr(r.reason);
                   }}
                   onRemove={() => {
-                    if (!window.confirm(`Apagar «${selected.title}»?`)) return;
-                    remove(selected.id);
-                    setSelectedId(null);
+                    void confirm({
+                      eyebrow: "Prazo",
+                      title: "Apagar este prazo?",
+                      body: `«${selected.title}» sai do calendário.`,
+                      confirmLabel: "Apagar",
+                    }).then((ok) => {
+                      if (!ok) return;
+                      remove(selected.id);
+                      setSelectedId(null);
+                    });
                   }}
                 />
                 <button
@@ -237,9 +246,16 @@ export function TarefasCalendario() {
                   task={selected}
                   onUpdate={onUpdate}
                   onRemove={() => {
-                    if (!window.confirm(`Apagar o evento «${selected.title}»?`)) return;
-                    remove(selected.id);
-                    setSelectedId(null);
+                    void confirm({
+                      eyebrow: "Evento",
+                      title: "Apagar este evento?",
+                      body: `«${selected.title}» sai do calendário.`,
+                      confirmLabel: "Apagar",
+                    }).then((ok) => {
+                      if (!ok) return;
+                      remove(selected.id);
+                      setSelectedId(null);
+                    });
                   }}
                   onClose={() => setSelectedId(null)}
                 />

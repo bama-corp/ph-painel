@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { ENTITY } from "../domain/labels";
 import { formatDatePt } from "../domain/money";
 import { isoWeekday, WEEKDAY_LABEL } from "../domain/routines";
@@ -94,6 +95,7 @@ export function Tarefas() {
   const entityId = entityFromTasksPath(ambito);
   const meta = ENTITY[entityId];
   const { tasks, add, setStatus, setQuadrant, toggleFocusToday, update, remove } = useTasks();
+  const confirm = useConfirm();
   const focusN = focusTodayCount(tasks, entityId);
   const listAll = tasksOf(tasks, entityId);
   const bundles = bundlesOf(tasks, entityId);
@@ -198,8 +200,14 @@ export function Tarefas() {
     setShowForm(false);
   }
 
-  function confirmRemove(id: string, taskTitle: string) {
-    if (!window.confirm(`Apagar «${taskTitle}»?`)) return;
+  async function confirmRemove(id: string, taskTitle: string) {
+    const ok = await confirm({
+      eyebrow: "Tarefa",
+      title: "Apagar esta tarefa?",
+      body: `«${taskTitle}» sai da lista.`,
+      confirmLabel: "Apagar",
+    });
+    if (!ok) return;
     remove(id);
   }
 

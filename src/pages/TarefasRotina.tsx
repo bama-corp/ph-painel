@@ -25,6 +25,7 @@ import {
 } from "../domain/tasks";
 import type { EntityId } from "../domain/types";
 import { COMPANIES } from "../domain/types";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Mark, PageHeader, Sep } from "../ui/Page";
 import { Select, type SelectOption } from "../ui/Select";
 
@@ -69,6 +70,7 @@ function blockKey(day: Weekday, block: TaskDayBlock) {
 
 export function TarefasRotina() {
   const { routines, addMany, place, update, remove, spawnToday, syncStatus } = useRoutines();
+  const confirm = useConfirm();
   const todayWd = isoWeekday();
   const ymd = todayYmd();
   const todayFocus = WEEKDAY_AREA_FOCUS[todayWd];
@@ -338,9 +340,16 @@ export function TarefasRotina() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!window.confirm(`Apagar «${r.title}» da rotina?`)) return;
-                      if (editingId === r.id) resetForm();
-                      remove(r.id);
+                      void confirm({
+                        eyebrow: "Rotina",
+                        title: "Apagar esta rotina?",
+                        body: `«${r.title}» sai da semana.`,
+                        confirmLabel: "Apagar",
+                      }).then((ok) => {
+                        if (!ok) return;
+                        if (editingId === r.id) resetForm();
+                        remove(r.id);
+                      });
                     }}
                     className="text-[0.65rem] text-ink/25 hover:text-rust"
                     aria-label="Apagar"

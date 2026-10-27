@@ -5,6 +5,7 @@ import { NAV_LINKS } from "../domain/labels";
 import { monthLabel } from "../domain/money";
 import { useStore } from "../domain/store";
 import { AssistenteFab } from "../pages/Assistente";
+import { useConfirm } from "./ConfirmDialog";
 
 function SyncBadge() {
   const { syncStatus, syncError, pushNow, ready } = useStore();
@@ -36,6 +37,7 @@ function SyncBadge() {
 export function Shell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { state, setMonth, reset } = useStore();
+  const confirm = useConfirm();
   const { user, logout, configured } = useAuth();
   const navigate = useNavigate();
   const onEu = pathname === "/eu";
@@ -125,13 +127,14 @@ export function Shell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => {
-                if (
-                  window.confirm(
-                    "Repor ao snapshot do seed (19/08/2026)? Os dados deste browser são apagados e a BD será actualizada. Exporta JSON no Caderno se quiseres guardar.",
-                  )
-                ) {
-                  reset();
-                }
+                void confirm({
+                  eyebrow: "Caderno",
+                  title: "Repor o seed?",
+                  body: "Volta ao snapshot de 19/08/2026. Os dados deste browser são apagados e a base é actualizada. Exporta o JSON no Caderno se quiseres guardar.",
+                  confirmLabel: "Repor",
+                }).then((ok) => {
+                  if (ok) reset();
+                });
               }}
               className="min-h-10 tracking-wide hover:text-ink sm:min-h-0"
             >
