@@ -137,6 +137,13 @@ const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  function commitState(next: AppState) {
+    stateRef.current = next;
+    setState(next);
+  }
   const [ready, setReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Store["syncStatus"]>("loading");
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -274,11 +281,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pluralSync,
     syncPlural: runPluralSync,
     addMovement: (m) => {
-      let result: MovementResult = { ok: false, reason: "Estado indisponível.", state };
-      setState((s) => {
-        result = applyAddMovement(s, m, uid("m"));
-        return result.ok ? result.state : s;
-      });
+      const result = applyAddMovement(stateRef.current, m, uid("m"));
+      if (result.ok) commitState(result.state);
       return result;
     },
     removeMovement: (id) => {
@@ -409,27 +413,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addClient: (c) =>
       setState((s) => ({ ...s, roveClients: [...s.roveClients, { ...c, id: uid("c") }] })),
     allocate: (parts) => {
-      let result: AllocateResult = { ok: false, reason: "Estado indisponível.", state };
-      setState((s) => {
-        result = applyAllocate(s, parts);
-        return result.ok ? result.state : s;
-      });
+      const result = applyAllocate(stateRef.current, parts);
+      if (result.ok) commitState(result.state);
       return result;
     },
     deallocate: (parts) => {
-      let result: AllocateResult = { ok: false, reason: "Estado indisponível.", state };
-      setState((s) => {
-        result = applyDeallocate(s, parts);
-        return result.ok ? result.state : s;
-      });
+      const result = applyDeallocate(stateRef.current, parts);
+      if (result.ok) commitState(result.state);
       return result;
     },
     distributeEntry: (amount) => {
-      let result: AllocateResult = { ok: false, reason: "Estado indisponível.", state };
-      setState((s) => {
-        result = applyDistributeEntry(s, amount);
-        return result.ok ? result.state : s;
-      });
+      const result = applyDistributeEntry(stateRef.current, amount);
+      if (result.ok) commitState(result.state);
       return result;
     },
     addIncomeSource: (draft) => {

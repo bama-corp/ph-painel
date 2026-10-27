@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { CW_CATS, KIND_LABEL } from "../domain/engine";
 import { entitySelectOptions, entityShort } from "../domain/labels";
-import { todayIso } from "../domain/money";
+import { parseKzInput, todayIso } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { CostNature, CwCategory, EntityId, MovementKind } from "../domain/types";
 import { DateField } from "./DateField";
@@ -82,7 +82,7 @@ export function MoveForm({ defaultEntity }: { defaultEntity?: EntityId }) {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const n = Number(String(amount).replace(",", "."));
+    const n = parseKzInput(amount) ?? Number.NaN;
     if (!n || n <= 0) {
       setErr("Valor inválido.");
       return;

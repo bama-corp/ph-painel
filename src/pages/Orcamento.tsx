@@ -16,10 +16,10 @@ import {
   rulesOk,
   splitSalary,
 } from "../domain/engine";
-import { kz, monthLabel, roundKz } from "../domain/money";
+import { kz, monthLabel, parseKzInput, roundKz } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { AppState, BudgetBucket, BudgetRules } from "../domain/types";
-import { Money } from "../ui/Money";
+import { KzInput, Money } from "../ui/Money";
 import { Mark, PageHeader, Section, TotalRow } from "../ui/Page";
 
 const RULE_KEYS = [
@@ -39,6 +39,17 @@ const BUCKET_HINTS: Record<BudgetBucket, string> = {
 };
 
 type ErrZone = "sources" | "rules" | "lines" | "entry" | "bolsos" | "";
+
+/** Cada % × renda, mesmo quando a soma ainda não é 100. */
+function sliceByPct(amount: number, rules: BudgetRules) {
+  return {
+    obrigacoes: roundKz((amount * rules.obrigacoes) / 100),
+    reserva: roundKz((amount * rules.reserva) / 100),
+    investimento: roundKz((amount * rules.investimento) / 100),
+    despesas: roundKz((amount * rules.despesas) / 100),
+    lazer: roundKz((amount * rules.lazer) / 100),
+  };
+}
 
 function rulesEqual(a: BudgetRules, b: BudgetRules) {
   return (
@@ -103,10 +114,10 @@ export function Orcamento() {
   const u = allocatablePersonal(state);
   const planned = plannedIncomeTotal(state);
   const draftDirty = !rulesEqual(draft, state.rules);
-  /** Tecto do inventário: rascunho se válido, senão regras guardadas. */
-  const ceilingRules = rulesOk(draft) ? draft : state.rules;
-  const split = splitSalary(planned, ceilingRules);
-  const entryPreview = Number(String(entryRaw).replace(",", ".")) || 0;
+  /** Tecto e Kz seguem o que está escrito, mesmo antes da soma fechar em 100. */
+  const ceilingRules = draft;
+  const split = rulesOk(draft) ? splitSalary(planned, draft) : sliceByPct(planned, draft);
+  const entryPreview = parseKzInput(entryRaw) ?? 0;
   const entrySplit = entryPreview > 0 && rulesOk(state.rules) ? splitSalary(entryPreview, state.rules) : null;
   const ok = rulesOk(draft);
   const sumPct =
@@ -140,7 +151,11 @@ export function Orcamento() {
   }
 
   function onDistributeEntry() {
-    const n = Number(String(entryRaw).replace(",", "."));
+    const n = parseKzInput(entryRaw);
+    if (n == null || n <= 0) {
+      showErr("entry", "Indica o valor da entrada. Ex.: 300.000 ou 300000.");
+      return;
+    }
     const r = distributeEntry(n);
     if (!r.ok) {
       showErr("entry", r.reason);
@@ -151,10 +166,9 @@ export function Orcamento() {
   }
 
   function meterBolso(envelopeId: string) {
-    const raw = amounts[envelopeId] ?? "";
-    const n = Number(String(raw).replace(",", "."));
-    if (!n || n <= 0) {
-      showErr("bolsos", "Indica um valor positivo para meter no bolso.");
+    const n = parseKzInput(amounts[envelopeId] ?? "");
+    if (n == null || n <= 0) {
+      showErr("bolsos", "Indica um valor positivo para meter no bolso. Ex.: 50.000.");
       return;
     }
     const r = allocate([{ envelopeId, amount: roundKz(n) }]);
@@ -167,10 +181,9 @@ export function Orcamento() {
   }
 
   function tirarBolso(envelopeId: string) {
-    const raw = amounts[envelopeId] ?? "";
-    const n = Number(String(raw).replace(",", "."));
-    if (!n || n <= 0) {
-      showErr("bolsos", "Indica um valor positivo para tirar do bolso.");
+    const n = parseKzInput(amounts[envelopeId] ?? "");
+    if (n == null || n <= 0) {
+      showErr("bolsos", "Indica um valor positivo para tirar do bolso. Ex.: 50.000.");
       return;
     }
     const r = deallocate([{ envelopeId, amount: roundKz(n) }]);
@@ -183,7 +196,7 @@ export function Orcamento() {
   }
 
   function onAddSource() {
-    const n = Number(String(newAmount).replace(",", "."));
+    const n = parseKzInput(newAmount) ?? Number.NaN;
     const r = addIncomeSource({ name: newName, amount: n, active: true });
     if (!r.ok) {
       showErr("sources", r.reason);
@@ -196,7 +209,7 @@ export function Orcamento() {
 
   function onAddLine(bucket: BudgetBucket) {
     const d = lineDrafts[bucket];
-    const n = Number(String(d.amount).replace(",", ".")) || 0;
+    const n = parseKzInput(d.amount) ?? 0;
     const r = addBudgetLine({ bucket, name: d.name, amount: n, active: true });
     if (!r.ok) {
       showErr("lines", r.reason);
@@ -257,14 +270,10 @@ export function Orcamento() {
               </label>
               <label className="field-label form-amount">
                 Valor (Kz)
-                <input
+                <KzInput
                   className="field num text-sm font-normal normal-case tracking-normal text-ink"
-                  inputMode="decimal"
                   value={src.amount}
-                  onChange={(e) => {
-                    const n = Number(String(e.target.value).replace(",", "."));
-                    if (Number.isFinite(n) && n >= 0) setIncomeSource(src.id, { amount: n });
-                  }}
+                  onValue={(n) => setIncomeSource(src.id, { amount: n })}
                 />
               </label>
               <label className="flex items-center gap-2 pb-2 text-sm text-ink/60">
@@ -459,14 +468,10 @@ export function Orcamento() {
                           </label>
                           <label className="field-label form-amount">
                             Valor (Kz)
-                            <input
+                            <KzInput
                               className="field num text-sm font-normal normal-case tracking-normal text-ink"
-                              inputMode="decimal"
                               value={line.amount}
-                              onChange={(e) => {
-                                const n = Number(String(e.target.value).replace(",", "."));
-                                if (Number.isFinite(n) && n >= 0) setBudgetLine(line.id, { amount: n });
-                              }}
+                              onValue={(n) => setBudgetLine(line.id, { amount: n })}
                             />
                           </label>
                           <label className="flex items-center gap-2 pb-2 text-sm text-ink/60">

@@ -1,4 +1,5 @@
-import { kz } from "../domain/money";
+import { useState } from "react";
+import { kz, parseKzInput } from "../domain/money";
 
 export function Money({
   n,
@@ -24,5 +25,35 @@ export function Money({
     >
       {kz(n)}
     </span>
+  );
+}
+
+/** Campo de Kz. Mantém o que está a ser escrito (`1.500.`) e grava quando o número fecha. */
+export function KzInput({
+  value,
+  onValue,
+  className,
+  placeholder,
+}: {
+  value: number;
+  onValue: (n: number) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      className={className}
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        const n = parseKzInput(raw);
+        if (n != null) onValue(n);
+      }}
+      onBlur={() => setDraft(null)}
+    />
   );
 }

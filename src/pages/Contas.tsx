@@ -10,6 +10,7 @@ import {
   partyOf,
   personalOwnLiquidity,
 } from "../domain/engine";
+import { parseKzInput } from "../domain/money";
 import { useStore } from "../domain/store";
 import type { OwnershipClass, Party } from "../domain/types";
 import { Money } from "../ui/Money";
@@ -135,7 +136,7 @@ export function Contas() {
                     }
                     onBlur={(e) => {
                       if (openingLocked) return;
-                      setAccountOpening(a.id, Number(String(e.target.value).replace(",", ".")) || 0);
+                      setAccountOpening(a.id, parseKzInput(e.target.value) ?? 0);
                     }}
                   />
                 </label>
@@ -310,7 +311,7 @@ function AddPartyForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const opening = Number(String(amount).replace(",", ".")) || 0;
+    const opening = parseKzInput(amount) ?? 0;
     const r = onAdd({
       entityId: "pessoal",
       name,
@@ -419,7 +420,7 @@ function PartyRow({
   const [err, setErr] = useState("");
 
   function runPay() {
-    const n = Number(String(payRaw).replace(",", "."));
+    const n = parseKzInput(payRaw) ?? Number.NaN;
     if (!n || n <= 0) {
       setErr("Valor inválido.");
       return;
@@ -469,7 +470,7 @@ function PartyRow({
               className="field num m-0 mt-1 w-full max-w-[8.5rem] py-1 text-right text-sm sm:max-w-none"
               defaultValue={party.opening || ""}
               placeholder="opening"
-              onBlur={(e) => onSetOpening(Number(String(e.target.value).replace(",", ".")) || 0)}
+              onBlur={(e) => onSetOpening(parseKzInput(e.target.value) ?? 0)}
             />
           ) : null}
         </div>

@@ -1,5 +1,53 @@
 export const roundKz = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+/**
+ * Lê um campo de valor em Kz.
+ * `1500` · `1.500` · `1.500.000` · `1.500,50` · `1500,5` · `10.5`.
+ * Separador a meio (`1.` / `1.500.`) devolve null para o texto poder continuar.
+ */
+export function parseKzInput(raw: string): number | null {
+  const s = raw.trim().replace(/[\s\u00a0]/g, "");
+  if (!s || /[.,]$/.test(s)) return null;
+  if (!/^\d[\d.,]*$/.test(s)) return null;
+
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  let normalized: string;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      const intRaw = s.slice(0, lastComma);
+      const dec = s.slice(lastComma + 1);
+      if (!/^\d{1,2}$/.test(dec)) return null;
+      if (!/^\d{1,3}(\.\d{3})*$/.test(intRaw) && !/^\d+$/.test(intRaw)) return null;
+      normalized = `${intRaw.replace(/\./g, "")}.${dec}`;
+    } else {
+      const intRaw = s.slice(0, lastDot);
+      const dec = s.slice(lastDot + 1);
+      if (!/^\d{1,2}$/.test(dec)) return null;
+      if (!/^\d{1,3}(,\d{3})*$/.test(intRaw) && !/^\d+$/.test(intRaw)) return null;
+      normalized = `${intRaw.replace(/,/g, "")}.${dec}`;
+    }
+  } else if (lastComma >= 0) {
+    const intRaw = s.slice(0, lastComma);
+    const dec = s.slice(lastComma + 1);
+    if (!/^\d+$/.test(intRaw) || !/^\d{1,2}$/.test(dec)) return null;
+    normalized = `${intRaw}.${dec}`;
+  } else if (lastDot >= 0) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) normalized = s.replace(/\./g, "");
+    else if (/^\d+\.\d{1,2}$/.test(s)) normalized = s;
+    else return null;
+  } else if (/^\d+$/.test(s)) {
+    normalized = s;
+  } else {
+    return null;
+  }
+
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return roundKz(n);
+}
+
 export function kz(n: number, digits = 2) {
   return `${new Intl.NumberFormat("pt-PT", {
     minimumFractionDigits: digits,
