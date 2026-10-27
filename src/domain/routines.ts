@@ -11,6 +11,8 @@ export type Routine = {
   title: string;
   note: string;
   weekday: Weekday;
+  /** HH:mm. Vazio = sem hora marcada. */
+  startsAt: string;
   timeboxMin: number;
   dayBlock: TaskDayBlock;
   focusToday: boolean;
@@ -60,6 +62,26 @@ function normalizeTimebox(raw: unknown): number {
   return Math.min(480, Math.round(n));
 }
 
+export function normalizeStartsAt(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return "";
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return "";
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
+/** Manhã até às 12, tarde até às 18, depois noite. */
+export function blockFromTime(time: string): TaskDayBlock {
+  const startsAt = normalizeStartsAt(time);
+  if (!startsAt) return "";
+  const h = Number(startsAt.slice(0, 2));
+  if (h < 12) return "manha";
+  if (h < 18) return "tarde";
+  return "noite";
+}
+
 function normalizeWeekday(raw: unknown): Weekday | null {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isInteger(n) || n < 0 || n > 6) return null;
@@ -91,6 +113,7 @@ export function createRoutine(draft: {
   title: string;
   note?: string;
   weekday: Weekday;
+  startsAt?: string;
   timeboxMin?: number;
   dayBlock?: TaskDayBlock;
   focusToday?: boolean;
@@ -104,6 +127,7 @@ export function createRoutine(draft: {
     title: draft.title.trim(),
     note: (draft.note ?? "").trim(),
     weekday: draft.weekday,
+    startsAt: normalizeStartsAt(draft.startsAt),
     timeboxMin: normalizeTimebox(draft.timeboxMin ?? 0),
     dayBlock: draft.dayBlock ?? "",
     focusToday: Boolean(draft.focusToday),
@@ -135,6 +159,7 @@ export function coerceRoutine(x: unknown): Routine | null {
     title: r.title,
     note: typeof r.note === "string" ? r.note : "",
     weekday,
+    startsAt: normalizeStartsAt(r.startsAt ?? r.starts_at),
     timeboxMin: normalizeTimebox(r.timeboxMin ?? r.timebox_min),
     dayBlock: normalizeDayBlock(r.dayBlock ?? r.day_block),
     focusToday: Boolean(r.focusToday ?? r.focus_today),

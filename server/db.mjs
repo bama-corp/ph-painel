@@ -77,6 +77,7 @@ export async function ensureTasksSchema(sql) {
     )
   `;
   await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS area TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS starts_at TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_entity_idx ON ph_routines (entity_id)`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_weekday_idx ON ph_routines (weekday)`;
 }
@@ -328,6 +329,17 @@ export function authorize(req) {
   return { ok: true, via: "open" };
 }
 
+/** HH:mm ou vazio. */
+function normalizeClock(raw) {
+  const s = String(raw ?? "").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return "";
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return "";
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
 /** 0=segunda … 6=domingo */
 /** @returns {{ ok: true, routine: object } | { ok: false, error: string }} */
 export function validateRoutineInput(raw, { requireId = true } = {}) {
@@ -351,6 +363,7 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
   if (!Number.isFinite(sortOrder)) sortOrder = 0;
   const area = String(raw.area ?? "").trim();
   if (!TASK_AREAS.has(area)) return { ok: false, error: "area inválida." };
+  const startsAt = normalizeClock(raw.startsAt ?? raw.starts_at);
   return {
     ok: true,
     routine: {
@@ -359,6 +372,7 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
       title,
       note: String(raw.note ?? ""),
       weekday,
+      startsAt,
       timeboxMin,
       dayBlock,
       focusToday: Boolean(raw.focusToday ?? raw.focus_today),
@@ -377,6 +391,7 @@ function rowToRoutine(row) {
     title: row.title,
     note: row.note ?? "",
     weekday: Number(row.weekday),
+    startsAt: row.starts_at ?? "",
     timeboxMin: Number(row.timebox_min ?? 0),
     dayBlock: row.day_block ?? "",
     focusToday: Boolean(row.focus_today),
@@ -393,7 +408,7 @@ function rowToRoutine(row) {
 
 export async function listRoutines(sql) {
   const rows = await sql`
-    SELECT id, entity_id, title, note, weekday, timebox_min, day_block,
+    SELECT id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
            focus_today, active, sort_order, last_spawn_ymd, area, updated_at
     FROM ph_routines
     ORDER BY weekday ASC, sort_order ASC, title ASC, id ASC
@@ -407,7 +422,7 @@ export async function upsertRoutine(sql, raw) {
   const r = v.routine;
   const rows = await sql`
     INSERT INTO ph_routines (
-      id, entity_id, title, note, weekday, timebox_min, day_block,
+      id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
       focus_today, active, sort_order, last_spawn_ymd, area, updated_at
     ) VALUES (
       ${r.id},
@@ -415,6 +430,7 @@ export async function upsertRoutine(sql, raw) {
       ${r.title},
       ${r.note},
       ${r.weekday},
+      ${r.startsAt || ""},
       ${r.timeboxMin},
       ${r.dayBlock},
       ${r.focusToday},
@@ -429,6 +445,7 @@ export async function upsertRoutine(sql, raw) {
       title = EXCLUDED.title,
       note = EXCLUDED.note,
       weekday = EXCLUDED.weekday,
+      starts_at = EXCLUDED.starts_at,
       timebox_min = EXCLUDED.timebox_min,
       day_block = EXCLUDED.day_block,
       focus_today = EXCLUDED.focus_today,
@@ -437,7 +454,7 @@ export async function upsertRoutine(sql, raw) {
       last_spawn_ymd = EXCLUDED.last_spawn_ymd,
       area = EXCLUDED.area,
       updated_at = now()
-    RETURNING id, entity_id, title, note, weekday, timebox_min, day_block,
+    RETURNING id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
               focus_today, active, sort_order, last_spawn_ymd, area, updated_at
   `;
   return rowToRoutine(rows[0]);

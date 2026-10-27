@@ -2,7 +2,9 @@ import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react
 import { Link } from "react-router-dom";
 import { ENTITY } from "../domain/labels";
 import {
+  blockFromTime,
   isoWeekday,
+  normalizeStartsAt,
   routinesForWeekday,
   routinesInBlock,
   todayYmd,
@@ -77,6 +79,7 @@ export function TarefasRotina() {
   const [weekdays, setWeekdays] = useState<Weekday[]>([todayWd]);
   const [entityId, setEntityId] = useState<EntityId>("pessoal");
   const [timeboxMin, setTimeboxMin] = useState(0);
+  const [startsAt, setStartsAt] = useState("");
   const [dayBlock, setDayBlock] = useState<TaskDayBlock>("");
   const [area, setArea] = useState<TaskArea>(todayFocus.areas[0] ?? "");
   const [focusToday, setFocus] = useState(false);
@@ -85,6 +88,7 @@ export function TarefasRotina() {
   const [err, setErr] = useState("");
   const [spawnMsg, setSpawnMsg] = useState("");
   const [overKey, setOverKey] = useState<string | null>(null);
+  const [openDay, setOpenDay] = useState<Weekday | null>(null);
 
   const byDay = useMemo(
     () => WEEKDAYS.map((d) => ({ day: d, items: routines.filter((r) => r.weekday === d) })),
@@ -98,6 +102,7 @@ export function TarefasRotina() {
     setTitle("");
     setNote("");
     setTimeboxMin(0);
+    setStartsAt("");
     setDayBlock("");
     setArea(WEEKDAY_AREA_FOCUS[weekdays[0] ?? todayWd].areas[0] ?? "");
     setFocus(false);
@@ -111,6 +116,7 @@ export function TarefasRotina() {
     setNote("");
     setWeekdays([day]);
     setDayBlock(block);
+    setStartsAt("");
     setArea(WEEKDAY_AREA_FOCUS[day].areas[0] ?? "");
     setTimeboxMin(0);
     setFocus(false);
@@ -125,6 +131,7 @@ export function TarefasRotina() {
     setWeekdays([r.weekday]);
     setEntityId(r.entityId);
     setTimeboxMin(r.timeboxMin);
+    setStartsAt(r.startsAt);
     setDayBlock(r.dayBlock);
     setArea(r.area);
     setFocus(r.focusToday);
@@ -149,12 +156,14 @@ export function TarefasRotina() {
       setErr("Escolhe pelo menos um dia.");
       return;
     }
+    const clock = normalizeStartsAt(startsAt);
     const draft = {
       entityId,
       title,
       note,
       timeboxMin,
-      dayBlock,
+      startsAt: clock,
+      dayBlock: dayBlock || blockFromTime(clock),
       focusToday,
       area,
     };
@@ -212,6 +221,148 @@ export function TarefasRotina() {
     moveTo(id, day, block, index);
   }
 
+  function daySections(day: Weekday) {
+    const loose = routinesInBlock(routines, day, "");
+    const sections: { id: TaskDayBlock; label: string; items: Routine[] }[] = [
+      ...(loose.length > 0 ? [{ id: "" as TaskDayBlock, label: "Sem bloco", items: loose }] : []),
+      ...DAY_BLOCKS.map((b) => ({
+        id: b.id,
+        label: b.label,
+        items: routinesInBlock(routines, day, b.id),
+      })),
+    ];
+    return sections;
+  }
+
+  function renderBlock(day: Weekday, section: { id: TaskDayBlock; label: string; items: Routine[] }, wide: boolean) {
+    const key = blockKey(day, section.id);
+    return (
+      <div
+        key={key}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setOverKey(key);
+        }}
+        onDragLeave={() => setOverKey((cur) => (cur === key ? null : cur))}
+        onDrop={(e) => onDrop(e, day, section.id, section.items.length)}
+        className={`rounded-sm px-1 py-1 ${overKey === key ? "bg-copper/[0.08]" : ""}`}
+      >
+        <p className="text-[0.62rem] uppercase tracking-[0.14em] text-ink/35">{section.label}</p>
+        <ul className="mt-1 space-y-2">
+          {section.items.length === 0 ? (
+            <li className="text-[0.72rem] text-ink/25">—</li>
+          ) : (
+            section.items.map((r, index) => (
+              <li
+                key={r.id}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOverKey(key);
+                }}
+                onDrop={(e) => {
+                  const id = draggingId.current;
+                  const without = section.items.filter((item) => item.id !== id);
+                  const at = without.findIndex((item) => item.id === r.id);
+                  onDrop(e, day, section.id, at < 0 ? without.length : at);
+                }}
+                className={`border-b border-ink/[0.06] pb-2 ${r.active ? "" : "opacity-50"} ${
+                  editingId === r.id ? "bg-copper/[0.06]" : ""
+                }`}
+              >
+                <div className="flex items-start gap-1">
+                  <span
+                    draggable
+                    onDragStart={(e) => onDragStart(e, r.id)}
+                    onDragEnd={() => {
+                      draggingId.current = null;
+                      setOverKey(null);
+                    }}
+                    className="mt-0.5 cursor-grab select-none px-0.5 text-[0.7rem] leading-none text-ink/30 hover:text-ink"
+                    title="Arrastar para outro dia ou bloco"
+                    aria-label="Reposicionar"
+                  >
+                    ⋮⋮
+                  </span>
+                  <p className={`min-w-0 flex-1 text-left leading-snug text-ink/85 ${wide ? "text-base" : "text-[0.8rem]"}`}>
+                    {r.startsAt ? <span className="num mr-1.5 text-copper">{r.startsAt}</span> : null}
+                    {r.title}
+                  </p>
+                </div>
+                {wide && r.note ? (
+                  <p className="mt-1 pl-4 text-sm text-ink/55 whitespace-pre-wrap">{r.note}</p>
+                ) : null}
+                <p className="mt-0.5 pl-4 text-[0.65rem] text-ink/40">
+                  {!r.active ? "Pausada · " : ""}
+                  {r.area ? `${TASK_AREA_LABEL[r.area]} · ` : ""}
+                  {ENTITY[r.entityId]?.short ?? r.entityId}
+                  {r.dayBlock ? ` · ${DAY_BLOCK_LABEL[r.dayBlock]}` : ""}
+                  {r.timeboxMin > 0 ? ` · ${r.timeboxMin}m` : ""}
+                  {r.focusToday ? " · Hoje" : ""}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-4">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => moveTo(r.id, day, section.id, index - 1)}
+                    className="text-[0.65rem] text-ink/35 hover:text-ink disabled:opacity-30"
+                    aria-label="Subir"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === section.items.length - 1}
+                    onClick={() => moveTo(r.id, day, section.id, index + 1)}
+                    className="text-[0.65rem] text-ink/35 hover:text-ink disabled:opacity-30"
+                    aria-label="Descer"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(r)}
+                    className="text-[0.65rem] uppercase tracking-[0.1em] text-ink/40 hover:text-ink"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update(r.id, { active: !r.active })}
+                    className="text-[0.65rem] uppercase tracking-[0.1em] text-ink/35 hover:text-ink"
+                    title={r.active ? "Pausar (não gera amanhã)" : "Reactivar"}
+                  >
+                    {r.active ? "Pausar" : "Activar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm(`Apagar «${r.title}» da rotina?`)) return;
+                      if (editingId === r.id) resetForm();
+                      remove(r.id);
+                    }}
+                    className="text-[0.65rem] text-ink/25 hover:text-rust"
+                    aria-label="Apagar"
+                  >
+                    ×
+                  </button>
+                </div>
+              </li>
+            ))
+          )}
+        </ul>
+        <button
+          type="button"
+          onClick={() => openCreate(day, section.id)}
+          className="mt-1 pl-1 text-[0.7rem] text-ink/40 hover:text-ink"
+        >
+          + {section.label.toLowerCase()}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <PageHeader title="Rotina" mark="pine">
@@ -250,6 +401,13 @@ export function TarefasRotina() {
         >
           Gerar tarefas de hoje
         </button>
+        <button
+          type="button"
+          onClick={() => setOpenDay(todayWd)}
+          className="border-b border-ink/25 pb-px text-ink/70 hover:border-ink hover:text-ink"
+        >
+          Abrir hoje
+        </button>
         {syncStatus === "local" || syncStatus === "offline" || syncStatus === "error" ? (
           <span className="text-rust">Sync: {syncStatus}</span>
         ) : null}
@@ -259,179 +417,91 @@ export function TarefasRotina() {
       <section className="mt-8">
         <div className="section-head">
           <Mark tone="pine" />
-          <h2 className="section-title">Semana</h2>
+          <h2 className="section-title">{openDay === null ? "Semana" : WEEKDAY_LABEL[openDay]}</h2>
+          {openDay !== null ? (
+            <button
+              type="button"
+              onClick={() => setOpenDay(null)}
+              className="ml-auto text-[0.75rem] text-ink/50 hover:text-ink"
+            >
+              Semana
+            </button>
+          ) : null}
         </div>
         <p className="mt-2 max-w-2xl text-sm text-ink/55">
-          Cada dia divide-se em manhã, tarde e noite. Arrasta uma rotina — ou usa as setas — para a
-          mudar de sítio. Em {ymd}, as activas de {WEEKDAY_LABEL[todayWd].toLowerCase()} entram em
-          «Para fazer».
+          Cada dia divide-se em manhã, tarde e noite. Abre um dia para ver as horas e as notas.
+          Arrasta uma rotina — ou usa as setas — para a mudar de sítio. Em {ymd}, as activas de{" "}
+          {WEEKDAY_LABEL[todayWd].toLowerCase()} entram em «Para fazer».
         </p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {byDay.map(({ day }) => {
-            const isToday = day === todayWd;
-            const focus = WEEKDAY_AREA_FOCUS[day];
-            const loose = routinesInBlock(routines, day, "");
-            const sections: { id: TaskDayBlock; label: string; items: Routine[] }[] = [
-              ...(loose.length > 0
-                ? [{ id: "" as TaskDayBlock, label: "Sem bloco", items: loose }]
-                : []),
-              ...DAY_BLOCKS.map((b) => ({
-                id: b.id,
-                label: b.label,
-                items: routinesInBlock(routines, day, b.id),
-              })),
-            ];
-            return (
-              <div
-                key={day}
-                className={`min-h-[8rem] border-t-2 pt-3 ${isToday ? "border-copper" : "border-ink/10"}`}
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <h3 className={`font-display text-[0.95rem] ${isToday ? "text-copper" : "text-ink/80"}`}>
-                    <span className="sm:hidden">{WEEKDAY_SHORT[day]}</span>
-                    <span className="hidden sm:inline">{WEEKDAY_LABEL[day]}</span>
-                  </h3>
-                  <span className="num text-[0.65rem] text-ink/35">
-                    {sections.reduce((n, s) => n + s.items.length, 0)}
-                  </span>
+        {openDay !== null ? (
+          <>
+            <div className="mt-5 flex flex-wrap gap-1.5" role="group" aria-label="Escolher dia">
+              {WEEKDAYS.map((d) => {
+                const on = openDay === d;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setOpenDay(d)}
+                    className={`border px-2 py-1 text-[0.72rem] uppercase tracking-[0.08em] ${
+                      on ? "border-ink bg-ink text-paper" : "border-ink/15 text-ink/55 hover:border-ink/40"
+                    } ${d === todayWd && !on ? "text-copper" : ""}`}
+                  >
+                    {WEEKDAY_SHORT[d]}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-[0.65rem] uppercase tracking-[0.1em] text-ink/40">
+              {WEEKDAY_AREA_FOCUS[openDay].label} · {WEEKDAY_AREA_FOCUS[openDay].hours}
+              {openDay === todayWd ? " · hoje" : ""}
+            </p>
+            <div
+              className={`mt-4 grid gap-6 ${
+                daySections(openDay).some((s) => s.id === "") ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+              }`}
+            >
+              {daySections(openDay).map((section) => renderBlock(openDay, section, true))}
+            </div>
+          </>
+        ) : (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {byDay.map(({ day }) => {
+              const isToday = day === todayWd;
+              const focus = WEEKDAY_AREA_FOCUS[day];
+              const sections = daySections(day);
+              return (
+                <div
+                  key={day}
+                  className={`min-h-[8rem] border-t-2 pt-3 ${isToday ? "border-copper" : "border-ink/10"}`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className={`font-display text-[0.95rem] ${isToday ? "text-copper" : "text-ink/80"}`}>
+                      <span className="sm:hidden">{WEEKDAY_SHORT[day]}</span>
+                      <span className="hidden sm:inline">{WEEKDAY_LABEL[day]}</span>
+                    </h3>
+                    <span className="num text-[0.65rem] text-ink/35">
+                      {sections.reduce((n, s) => n + s.items.length, 0)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[0.65rem] uppercase tracking-[0.1em] text-ink/40">
+                    {focus.label} · {focus.hours}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOpenDay(day)}
+                    className="mt-2 text-[0.7rem] uppercase tracking-[0.12em] text-ink/45 hover:text-ink"
+                  >
+                    Abrir dia
+                  </button>
+                  <div className="mt-3 space-y-3">{sections.map((section) => renderBlock(day, section, false))}</div>
                 </div>
-                <p className="mt-1 text-[0.65rem] uppercase tracking-[0.1em] text-ink/40">
-                  {focus.label} · {focus.hours}
-                </p>
-
-                <div className="mt-3 space-y-3">
-                  {sections.map((section) => {
-                    const key = blockKey(day, section.id);
-                    return (
-                      <div
-                        key={key}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
-                          setOverKey(key);
-                        }}
-                        onDragLeave={() => setOverKey((cur) => (cur === key ? null : cur))}
-                        onDrop={(e) => onDrop(e, day, section.id, section.items.length)}
-                        className={`rounded-sm px-1 py-1 ${overKey === key ? "bg-copper/[0.08]" : ""}`}
-                      >
-                        <p className="text-[0.62rem] uppercase tracking-[0.14em] text-ink/35">
-                          {section.label}
-                        </p>
-                        <ul className="mt-1 space-y-2">
-                          {section.items.length === 0 ? (
-                            <li className="text-[0.72rem] text-ink/25">—</li>
-                          ) : (
-                            section.items.map((r, index) => (
-                              <li
-                                key={r.id}
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setOverKey(key);
-                                }}
-                                onDrop={(e) => {
-                                  const id = draggingId.current;
-                                  const without = section.items.filter((item) => item.id !== id);
-                                  const at = without.findIndex((item) => item.id === r.id);
-                                  onDrop(e, day, section.id, at < 0 ? without.length : at);
-                                }}
-                                className={`border-b border-ink/[0.06] pb-2 ${r.active ? "" : "opacity-50"} ${
-                                  editingId === r.id ? "bg-copper/[0.06]" : ""
-                                }`}
-                              >
-                                <div className="flex items-start gap-1">
-                                  <span
-                                    draggable
-                                    onDragStart={(e) => onDragStart(e, r.id)}
-                                    onDragEnd={() => {
-                                      draggingId.current = null;
-                                      setOverKey(null);
-                                    }}
-                                    className="mt-0.5 cursor-grab select-none px-0.5 text-[0.7rem] leading-none text-ink/30 hover:text-ink"
-                                    title="Arrastar para outro dia ou bloco"
-                                    aria-label="Reposicionar"
-                                  >
-                                    ⋮⋮
-                                  </span>
-                                  <p className="min-w-0 flex-1 text-left text-[0.8rem] leading-snug text-ink/85">
-                                    {r.title}
-                                  </p>
-                                </div>
-                                <p className="mt-0.5 pl-4 text-[0.65rem] text-ink/40">
-                                  {!r.active ? "Pausada · " : ""}
-                                  {r.area ? `${TASK_AREA_LABEL[r.area]} · ` : ""}
-                                  {ENTITY[r.entityId]?.short ?? r.entityId}
-                                  {r.dayBlock ? ` · ${DAY_BLOCK_LABEL[r.dayBlock]}` : ""}
-                                  {r.timeboxMin > 0 ? ` · ${r.timeboxMin}m` : ""}
-                                  {r.focusToday ? " · Hoje" : ""}
-                                </p>
-                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-4">
-                                  <button
-                                    type="button"
-                                    disabled={index === 0}
-                                    onClick={() => moveTo(r.id, day, section.id, index - 1)}
-                                    className="text-[0.65rem] text-ink/35 hover:text-ink disabled:opacity-30"
-                                    aria-label="Subir"
-                                  >
-                                    ↑
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={index === section.items.length - 1}
-                                    onClick={() => moveTo(r.id, day, section.id, index + 1)}
-                                    className="text-[0.65rem] text-ink/35 hover:text-ink disabled:opacity-30"
-                                    aria-label="Descer"
-                                  >
-                                    ↓
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openEdit(r)}
-                                    className="text-[0.65rem] uppercase tracking-[0.1em] text-ink/40 hover:text-ink"
-                                  >
-                                    Editar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => update(r.id, { active: !r.active })}
-                                    className="text-[0.65rem] uppercase tracking-[0.1em] text-ink/35 hover:text-ink"
-                                    title={r.active ? "Pausar (não gera amanhã)" : "Reactivar"}
-                                  >
-                                    {r.active ? "Pausar" : "Activar"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (!window.confirm(`Apagar «${r.title}» da rotina?`)) return;
-                                      if (editingId === r.id) resetForm();
-                                      remove(r.id);
-                                    }}
-                                    className="text-[0.65rem] text-ink/25 hover:text-rust"
-                                    aria-label="Apagar"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </li>
-                            ))
-                          )}
-                        </ul>
-                        <button
-                          type="button"
-                          onClick={() => openCreate(day, section.id)}
-                          className="mt-1 pl-1 text-[0.7rem] text-ink/40 hover:text-ink"
-                        >
-                          + {section.label.toLowerCase()}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <Sep />
@@ -496,6 +566,35 @@ export function TarefasRotina() {
                 })}
               </div>
             </div>
+            <label className="flex flex-wrap items-center gap-3 text-sm text-ink/70">
+              <span className="text-[0.65rem] uppercase tracking-[0.14em] text-ink/40">Hora</span>
+              <input
+                type="time"
+                value={startsAt}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setStartsAt(next);
+                  if (!dayBlock && next) {
+                    const inferred = blockFromTime(next);
+                    if (inferred) setDayBlock(inferred);
+                  }
+                }}
+                className="border border-ink/15 bg-transparent px-2 py-1 text-ink"
+              />
+              {startsAt ? (
+                <button
+                  type="button"
+                  onClick={() => setStartsAt("")}
+                  className="text-[0.72rem] text-ink/40 hover:text-ink"
+                >
+                  Limpar
+                </button>
+              ) : (
+                <span className="text-[0.72rem] text-ink/35">
+                  Opcional. Sem bloco escolhido, a hora define manhã, tarde ou noite.
+                </span>
+              )}
+            </label>
             <div>
               <p className="mb-2 text-[0.65rem] uppercase tracking-[0.14em] text-ink/40">
                 Bloco do dia

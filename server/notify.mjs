@@ -168,10 +168,11 @@ function addDaysYmd(ymd, days) {
 
 function routineLine(r) {
   const title = String(r.title || "").trim() || "(sem título)";
+  const time = /^\d{2}:\d{2}$/.test(String(r.startsAt || "")) ? r.startsAt : "";
   const block = DAY_BLOCK_PT[r.dayBlock] || "";
   const mins = Number(r.timeboxMin) > 0 ? `${r.timeboxMin}m` : "";
   const label = entityLabel(r.entityId);
-  const extra = [block, mins, label].filter(Boolean).join(" · ");
+  const extra = [time, block, mins, label].filter(Boolean).join(" · ");
   return extra ? `· ${title} — ${extra}` : `· ${title}`;
 }
 
@@ -228,6 +229,9 @@ export function buildTasksDigest(tasks, opts = {}) {
       const ba = BLOCK_RANK[a.dayBlock] ?? 3;
       const bb = BLOCK_RANK[b.dayBlock] ?? 3;
       if (ba !== bb) return ba - bb;
+      const ta = /^\d{2}:\d{2}$/.test(String(a.startsAt || "")) ? a.startsAt : "99:99";
+      const tb = /^\d{2}:\d{2}$/.test(String(b.startsAt || "")) ? b.startsAt : "99:99";
+      if (ta !== tb) return ta.localeCompare(tb);
       return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0) ||
         String(a.title || "").localeCompare(String(b.title || ""), "pt");
     });

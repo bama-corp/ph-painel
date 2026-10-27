@@ -12,6 +12,7 @@ import type { EntityId } from "./types";
 import {
   createRoutine,
   isoWeekday,
+  normalizeStartsAt,
   loadRoutines,
   mergeRoutines,
   placeRoutine,
@@ -36,6 +37,7 @@ type RoutineDraft = {
   title: string;
   note?: string;
   weekday: Weekday;
+  startsAt?: string;
   timeboxMin?: number;
   dayBlock?: TaskDayBlock;
   focusToday?: boolean;
@@ -63,6 +65,7 @@ type RoutinesApi = {
         | "title"
         | "note"
         | "weekday"
+        | "startsAt"
         | "timeboxMin"
         | "dayBlock"
         | "focusToday"
@@ -320,6 +323,8 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
               title: patch.title !== undefined ? patch.title.trim() : r.title,
               note: patch.note !== undefined ? patch.note.trim() : r.note,
               weekday: patch.weekday !== undefined ? patch.weekday : r.weekday,
+              startsAt:
+                patch.startsAt !== undefined ? normalizeStartsAt(patch.startsAt) : r.startsAt,
               timeboxMin: patch.timeboxMin !== undefined ? patch.timeboxMin : r.timeboxMin,
               dayBlock: patch.dayBlock !== undefined ? patch.dayBlock : r.dayBlock,
               focusToday: patch.focusToday !== undefined ? patch.focusToday : r.focusToday,
