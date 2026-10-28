@@ -54,6 +54,8 @@ export type Task = {
   bundle: string;
   /** Área: tecnologia / negócios / finanças / projeto / revisão */
   area: TaskArea;
+  /** Id em Projectos. Vazio = sem projecto. */
+  projectId: string;
   /** Checklist 1 nível */
   subtasks: TaskSubtask[];
   /** ISO — merge local↔remoto */
@@ -318,6 +320,7 @@ export function createTask(
     routineId?: string;
     bundle?: string;
     area?: TaskArea;
+    projectId?: string;
     subtasks?: TaskSubtask[];
   },
   at = new Date().toISOString().slice(0, 10),
@@ -337,6 +340,7 @@ export function createTask(
     routineId: (draft.routineId ?? "").trim(),
     bundle: (draft.bundle ?? "").trim(),
     area: normalizeArea(draft.area),
+    projectId: (draft.projectId ?? "").trim(),
     subtasks: normalizeSubtasks(draft.subtasks ?? []),
     updatedAt: nowIso(),
   };
@@ -368,6 +372,12 @@ export function coerceTask(x: unknown): Task | null {
     routineId: typeof t.routineId === "string" ? t.routineId : typeof t.routine_id === "string" ? t.routine_id : "",
     bundle: typeof t.bundle === "string" ? t.bundle.trim() : "",
     area: normalizeArea(t.area),
+    projectId:
+      typeof t.projectId === "string"
+        ? t.projectId.trim()
+        : typeof t.project_id === "string"
+          ? t.project_id.trim()
+          : "",
     subtasks: normalizeSubtasks(t.subtasks),
     updatedAt,
   };

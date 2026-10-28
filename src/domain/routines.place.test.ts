@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockFromTime, normalizeStartsAt, placeRoutine, type Routine, type Weekday } from "./routines";
+import { blockFromTime, normalizeStartsAt, placeRoutine, routinePhase, type Routine, type Weekday } from "./routines";
 import type { TaskDayBlock } from "./tasks";
 
 function routine(partial: {
@@ -22,6 +22,7 @@ function routine(partial: {
     active: true,
     sortOrder: partial.sortOrder ?? 0,
     lastSpawnYmd: "",
+    doneYmd: "",
     area: "tecnologia",
     updatedAt: "2026-10-01T00:00:00.000Z",
   };
@@ -70,5 +71,24 @@ describe("hora da rotina", () => {
     expect(blockFromTime("12:00")).toBe("tarde");
     expect(blockFromTime("18:00")).toBe("noite");
     expect(blockFromTime("")).toBe("");
+  });
+});
+
+describe("routinePhase", () => {
+  const ymd = "2026-10-27";
+  const base = routine({ id: "a", title: "Leitura", weekday: 1, sortOrder: 0 });
+
+  it("marca feito, agora, passou e a seguir", () => {
+    const at = (hhmm: string, extra: Partial<Routine> = {}) =>
+      routinePhase(
+        { ...base, startsAt: "09:00", timeboxMin: 30, ...extra },
+        new Date(`2026-10-27T${hhmm}:00`),
+        ymd,
+      );
+    expect(at("08:00")).toBe("a-seguir");
+    expect(at("09:10")).toBe("agora");
+    expect(at("09:40")).toBe("passou");
+    expect(at("12:00", { doneYmd: ymd })).toBe("feito");
+    expect(routinePhase({ ...base, startsAt: "" }, new Date("2026-10-27T12:00:00"), ymd)).toBe("sem-hora");
   });
 });

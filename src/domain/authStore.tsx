@@ -93,10 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthenticated(true);
       setUser(body.user ?? null);
       return { ok: true as const };
-    } catch (e) {
+    } catch {
       return {
         ok: false as const,
-        reason: e instanceof Error ? e.message : "Falha de rede",
+        reason: "A API local não está a correr. Usa npm run dev (sobe a API e o site).",
       };
     }
   }, []);

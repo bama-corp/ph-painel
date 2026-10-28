@@ -13,6 +13,7 @@ import {
   createRoutine,
   isoWeekday,
   normalizeStartsAt,
+  normalizeYmd,
   loadRoutines,
   mergeRoutines,
   placeRoutine,
@@ -73,6 +74,7 @@ type RoutinesApi = {
         | "entityId"
         | "sortOrder"
         | "area"
+        | "doneYmd"
       >
     >,
   ) => { ok: true } | { ok: false; reason: string };
@@ -332,6 +334,7 @@ export function RoutinesProvider({ children }: { children: ReactNode }) {
               entityId: patch.entityId !== undefined ? patch.entityId : r.entityId,
               sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : r.sortOrder,
               area: patch.area !== undefined ? patch.area : r.area,
+              doneYmd: patch.doneYmd !== undefined ? normalizeYmd(patch.doneYmd) : r.doneYmd,
             })
           : r,
       );

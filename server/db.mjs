@@ -56,6 +56,7 @@ export async function ensureTasksSchema(sql) {
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS subtasks JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS bundle TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS area TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE ph_tasks ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS ph_tasks_entity_idx ON ph_tasks (entity_id)`;
   await sql`CREATE INDEX IF NOT EXISTS ph_tasks_bundle_idx ON ph_tasks (bundle)`;
   await sql`CREATE INDEX IF NOT EXISTS ph_tasks_area_idx ON ph_tasks (area)`;
@@ -78,8 +79,22 @@ export async function ensureTasksSchema(sql) {
   `;
   await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS area TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS starts_at TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE ph_routines ADD COLUMN IF NOT EXISTS done_ymd TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_entity_idx ON ph_routines (entity_id)`;
   await sql`CREATE INDEX IF NOT EXISTS ph_routines_weekday_idx ON ph_routines (weekday)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS ph_projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'activo',
+      due TEXT NOT NULL DEFAULT '',
+      entity_id TEXT NOT NULL DEFAULT 'pessoal',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS ph_projects_status_idx ON ph_projects (status)`;
 }
 
 const TASK_ENTITIES = new Set(["pessoal", "cw", "rove", "picasso", "ph"]);
@@ -115,6 +130,7 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
   const bundle = String(raw.bundle ?? "").trim().slice(0, 64);
   const area = String(raw.area ?? "").trim();
   if (!TASK_AREAS.has(area)) return { ok: false, error: "area inválida." };
+  const projectId = String(raw.projectId ?? raw.project_id ?? "").trim().slice(0, 80);
   const subtasks = normalizeSubtasksInput(raw.subtasks);
   return {
     ok: true,
@@ -133,6 +149,7 @@ export function validateTaskInput(raw, { requireId = true } = {}) {
       routineId,
       bundle,
       area,
+      projectId,
       subtasks,
     },
   };
@@ -155,7 +172,7 @@ function normalizeSubtasksInput(raw) {
 export async function listTasks(sql) {
   const rows = await sql`
     SELECT id, entity_id, title, note, status, quadrant, focus_today, at, due,
-           timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
+           timebox_min, day_block, routine_id, bundle, area, project_id, subtasks, updated_at
     FROM ph_tasks
     ORDER BY at DESC, id DESC
   `;
@@ -178,6 +195,7 @@ function rowToTask(row) {
     routineId: row.routine_id ?? "",
     bundle: row.bundle ?? "",
     area: row.area ?? "",
+    projectId: row.project_id ?? "",
     subtasks: normalizeSubtasksInput(row.subtasks),
     updatedAt:
       row.updated_at instanceof Date
@@ -194,7 +212,7 @@ export async function upsertTask(sql, raw) {
   const rows = await sql`
     INSERT INTO ph_tasks (
       id, entity_id, title, note, status, quadrant, focus_today, at, due,
-      timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
+      timebox_min, day_block, routine_id, bundle, area, project_id, subtasks, updated_at
     ) VALUES (
       ${t.id},
       ${t.entityId},
@@ -210,6 +228,7 @@ export async function upsertTask(sql, raw) {
       ${t.routineId},
       ${t.bundle || ""},
       ${t.area || ""},
+      ${t.projectId || ""},
       ${subtasksJson}::jsonb,
       now()
     )
@@ -227,10 +246,11 @@ export async function upsertTask(sql, raw) {
       routine_id = EXCLUDED.routine_id,
       bundle = EXCLUDED.bundle,
       area = EXCLUDED.area,
+      project_id = EXCLUDED.project_id,
       subtasks = EXCLUDED.subtasks,
       updated_at = now()
     RETURNING id, entity_id, title, note, status, quadrant, focus_today, at, due,
-              timebox_min, day_block, routine_id, bundle, area, subtasks, updated_at
+              timebox_min, day_block, routine_id, bundle, area, project_id, subtasks, updated_at
   `;
   return rowToTask(rows[0]);
 }
@@ -364,6 +384,8 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
   const area = String(raw.area ?? "").trim();
   if (!TASK_AREAS.has(area)) return { ok: false, error: "area inválida." };
   const startsAt = normalizeClock(raw.startsAt ?? raw.starts_at);
+  const doneRaw = String(raw.doneYmd ?? raw.done_ymd ?? "").trim();
+  const doneYmd = /^\d{4}-\d{2}-\d{2}$/.test(doneRaw) ? doneRaw : "";
   return {
     ok: true,
     routine: {
@@ -379,6 +401,7 @@ export function validateRoutineInput(raw, { requireId = true } = {}) {
       active: raw.active === undefined ? true : Boolean(raw.active),
       sortOrder: Math.round(sortOrder),
       lastSpawnYmd: String(raw.lastSpawnYmd ?? raw.last_spawn_ymd ?? ""),
+      doneYmd,
       area,
     },
   };
@@ -398,6 +421,7 @@ function rowToRoutine(row) {
     active: Boolean(row.active),
     sortOrder: Number(row.sort_order ?? 0),
     lastSpawnYmd: row.last_spawn_ymd ?? "",
+    doneYmd: row.done_ymd ?? "",
     area: row.area ?? "",
     updatedAt:
       row.updated_at instanceof Date
@@ -409,7 +433,7 @@ function rowToRoutine(row) {
 export async function listRoutines(sql) {
   const rows = await sql`
     SELECT id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
-           focus_today, active, sort_order, last_spawn_ymd, area, updated_at
+           focus_today, active, sort_order, last_spawn_ymd, done_ymd, area, updated_at
     FROM ph_routines
     ORDER BY weekday ASC, sort_order ASC, title ASC, id ASC
   `;
@@ -423,7 +447,7 @@ export async function upsertRoutine(sql, raw) {
   const rows = await sql`
     INSERT INTO ph_routines (
       id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
-      focus_today, active, sort_order, last_spawn_ymd, area, updated_at
+      focus_today, active, sort_order, last_spawn_ymd, done_ymd, area, updated_at
     ) VALUES (
       ${r.id},
       ${r.entityId},
@@ -437,6 +461,7 @@ export async function upsertRoutine(sql, raw) {
       ${r.active},
       ${r.sortOrder},
       ${r.lastSpawnYmd},
+      ${r.doneYmd || ""},
       ${r.area || ""},
       now()
     )
@@ -452,10 +477,11 @@ export async function upsertRoutine(sql, raw) {
       active = EXCLUDED.active,
       sort_order = EXCLUDED.sort_order,
       last_spawn_ymd = EXCLUDED.last_spawn_ymd,
+      done_ymd = EXCLUDED.done_ymd,
       area = EXCLUDED.area,
       updated_at = now()
     RETURNING id, entity_id, title, note, weekday, starts_at, timebox_min, day_block,
-              focus_today, active, sort_order, last_spawn_ymd, area, updated_at
+              focus_today, active, sort_order, last_spawn_ymd, done_ymd, area, updated_at
   `;
   return rowToRoutine(rows[0]);
 }
@@ -479,4 +505,107 @@ export async function deleteRoutine(sql, id) {
     RETURNING id
   `;
   return { deleted: rows.length > 0, id: rid };
+}
+
+const PROJECT_STATUSES = new Set(["activo", "parado", "fechado"]);
+
+function normalizeProjectDue(raw) {
+  const s = String(raw ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+/** @returns {{ ok: true, project: object } | { ok: false, error: string }} */
+export function validateProjectInput(raw, { requireId = true } = {}) {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "Projecto inválido." };
+  const id = String(raw.id ?? "").trim();
+  if (requireId && !id) return { ok: false, error: "id obrigatório." };
+  const name = String(raw.name ?? "").trim();
+  if (!name) return { ok: false, error: "name obrigatório." };
+  const status = String(raw.status ?? "activo");
+  if (!PROJECT_STATUSES.has(status)) return { ok: false, error: "status inválido." };
+  const entityId = String(raw.entityId ?? raw.entity_id ?? "pessoal").trim();
+  if (!TASK_ENTITIES.has(entityId)) return { ok: false, error: "entityId inválido." };
+  return {
+    ok: true,
+    project: {
+      id: id || undefined,
+      name,
+      note: String(raw.note ?? ""),
+      status,
+      due: normalizeProjectDue(raw.due),
+      entityId,
+    },
+  };
+}
+
+function rowToProject(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    note: row.note ?? "",
+    status: row.status,
+    due: row.due ?? "",
+    entityId: row.entity_id,
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : String(row.updated_at ?? ""),
+  };
+}
+
+export async function listProjects(sql) {
+  const rows = await sql`
+    SELECT id, name, note, status, due, entity_id, updated_at
+    FROM ph_projects
+    ORDER BY name ASC, id ASC
+  `;
+  return rows.map(rowToProject);
+}
+
+export async function upsertProject(sql, raw) {
+  const v = validateProjectInput(raw, { requireId: true });
+  if (!v.ok) throw new Error(v.error);
+  const p = v.project;
+  const rows = await sql`
+    INSERT INTO ph_projects (id, name, note, status, due, entity_id, updated_at)
+    VALUES (
+      ${p.id},
+      ${p.name},
+      ${p.note},
+      ${p.status},
+      ${p.due},
+      ${p.entityId},
+      now()
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      note = EXCLUDED.note,
+      status = EXCLUDED.status,
+      due = EXCLUDED.due,
+      entity_id = EXCLUDED.entity_id,
+      updated_at = now()
+    RETURNING id, name, note, status, due, entity_id, updated_at
+  `;
+  return rowToProject(rows[0]);
+}
+
+export async function upsertProjectsBatch(sql, projects) {
+  if (!Array.isArray(projects)) throw new Error("projects deve ser um array.");
+  const saved = [];
+  for (const raw of projects) {
+    const v = validateProjectInput(raw, { requireId: true });
+    if (!v.ok) throw new Error(v.error);
+    saved.push(await upsertProject(sql, v.project));
+  }
+  return saved;
+}
+
+export async function deleteProject(sql, id) {
+  const pid = String(id || "").trim();
+  if (!pid) throw new Error("id obrigatório.");
+  const rows = await sql`
+    DELETE FROM ph_projects WHERE id = ${pid}
+    RETURNING id
+  `;
+  return { deleted: rows.length > 0, id: pid };
 }

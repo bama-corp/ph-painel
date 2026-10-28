@@ -49,6 +49,7 @@ import {
   todayYmd,
   type TasksVista,
 } from "../domain/tasksReview";
+import { useProjects } from "../domain/projectsStore";
 import { useTasks } from "../domain/tasksStore";
 import { DayBoard } from "../ui/DayBoard";
 import { EisenhowerMatrix } from "../ui/EisenhowerMatrix";
@@ -95,6 +96,7 @@ export function Tarefas() {
   const entityId = entityFromTasksPath(ambito);
   const meta = ENTITY[entityId];
   const { tasks, add, setStatus, setQuadrant, toggleFocusToday, update, remove } = useTasks();
+  const { projects } = useProjects();
   const confirm = useConfirm();
   const focusN = focusTodayCount(tasks, entityId);
   const listAll = tasksOf(tasks, entityId);
@@ -112,6 +114,7 @@ export function Tarefas() {
   const [due, setDue] = useState("");
   const [quadrant, setQuad] = useState<TaskQuadrant>("");
   const [area, setArea] = useState<TaskArea>("");
+  const [projectId, setProjectId] = useState("");
   const [focusToday, setFocus] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState("");
@@ -159,6 +162,13 @@ export function Tarefas() {
     setArea(WEEKDAY_AREA_FOCUS[isoWeekday()].areas[0] ?? "");
   }, [entityId]);
 
+  const projectOptions: SelectOption<string>[] = [
+    { value: "", label: "— Sem projecto", tone: "soft" },
+    ...projects
+      .filter((p) => p.status === "activo")
+      .map((p) => ({ value: p.id, label: p.name, tone: "pine" as const })),
+  ];
+
   const isMine = entityId === "pessoal";
   const heading = isMine ? "Minhas tarefas" : `Tarefas · ${meta.short}`;
   const stepsOk = review.steps.filter((s) => s.ok).length;
@@ -186,6 +196,7 @@ export function Tarefas() {
         area ||
         (areaFilter !== "" && areaFilter !== "hoje" ? areaFilter : todayFocus.areas[0]) ||
         undefined,
+      projectId: projectId || undefined,
     });
     if (!r.ok) {
       setErr(r.reason);
@@ -196,6 +207,7 @@ export function Tarefas() {
     setDue("");
     setQuad("");
     setArea(todayFocus.areas[0] ?? "");
+    setProjectId("");
     setFocus(false);
     setShowForm(false);
   }
@@ -453,6 +465,10 @@ export function Tarefas() {
               <Select value={quadrant} onChange={setQuad} options={QUADRANT_OPTIONS} />
             </label>
           </div>
+          <label className="field-label block">
+            Projecto
+            <Select value={projectId} onChange={setProjectId} options={projectOptions} />
+          </label>
           <label className="field-label block">
             Prazo (opcional)
             <input
@@ -1013,6 +1029,20 @@ function ReviewBlock({
   );
 }
 
+function TaskProjectMark({ id }: { id: string }) {
+  const { projects } = useProjects();
+  const name = projects.find((p) => p.id === id)?.name;
+  if (!name) return null;
+  return (
+    <Link
+      to={`/projectos/${id}`}
+      className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-ink/55 hover:text-ink"
+    >
+      {name}
+    </Link>
+  );
+}
+
 function TaskRow({
   task,
   onStatus,
@@ -1113,6 +1143,7 @@ function TaskRow({
                 {bundleLabel(task.bundle)}
               </span>
             ) : null}
+            {task.projectId ? <TaskProjectMark id={task.projectId} /> : null}
             {highlightTwoMin ? (
               <span className="shrink-0 text-[0.65rem] uppercase tracking-[0.14em] text-copper">
                 ≤2 min

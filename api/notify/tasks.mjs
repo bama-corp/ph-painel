@@ -9,7 +9,9 @@ import {
   authorizeNotify,
   buildTasksDigest,
   buildTestNotify,
+  deliverRoutineReminders,
   notifyChannelsConfigured,
+  routineReminders,
   sendNotify,
 } from "../server/notify.mjs";
 
@@ -109,9 +111,10 @@ export default async function handler(req, res) {
     const tasks = await listTasks(sql);
     const routines = await listRoutines(sql);
     const digest = buildTasksDigest(tasks, { routines });
+    const reminders = routineReminders(routines);
 
     if (dry) {
-      json(res, 200, { ok: true, dry: true, digest, channels }, origin);
+      json(res, 200, { ok: true, dry: true, digest, reminders, channels }, origin);
       return;
     }
 
@@ -125,7 +128,13 @@ export default async function handler(req, res) {
       json(res, 502, { error: sent.reason, digest, channels }, origin);
       return;
     }
-    json(res, 200, { ok: true, via: sent.via, counts: digest.counts, channels }, origin);
+    const reminderReport = await deliverRoutineReminders(routines);
+    json(
+      res,
+      200,
+      { ok: true, via: sent.via, counts: digest.counts, reminders: reminderReport, channels },
+      origin,
+    );
   } catch (e) {
     console.error(e);
     json(res, 500, { error: e.message || "Erro interno" }, origin);

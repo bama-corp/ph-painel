@@ -18,6 +18,13 @@ const MODULES = [
     hint: "Prioridades e acompanhamento.",
     tone: "soft" as const,
   },
+  {
+    to: "/projectos",
+    title: "Projectos",
+    line: "O trabalho com nome.",
+    hint: "Prazo, estado e as tarefas de cada um.",
+    tone: "copper" as const,
+  },
 ] as const;
 
 export function Hub() {
@@ -35,7 +42,7 @@ export function Hub() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center"
+        className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center"
       >
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-1 sm:gap-1.5">
@@ -73,7 +80,7 @@ export function Hub() {
         </p>
 
         <nav
-          className="mt-12 grid gap-0 border-t border-ink/15 sm:grid-cols-2 sm:gap-0"
+          className="mt-12 grid gap-0 border-t border-ink/15 sm:grid-cols-3 sm:gap-0"
           aria-label="Módulos"
         >
           {MODULES.map((m, i) => (
@@ -81,7 +88,11 @@ export function Hub() {
               key={m.to}
               to={m.to}
               className={`group block border-b border-ink/15 py-8 transition-colors hover:bg-wash/40 sm:py-10 ${
-                i === 0 ? "sm:border-r sm:pr-10" : "sm:pl-10"
+                i === 0
+                  ? "sm:border-r sm:pr-8"
+                  : i === MODULES.length - 1
+                    ? "sm:pl-8"
+                    : "sm:border-r sm:px-8"
               }`}
             >
               <p className="eyebrow flex items-center gap-2">

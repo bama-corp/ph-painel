@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   authorize,
   corsHeaders,
+  deleteProject,
   deleteRoutine,
   deleteTask,
   ensureSchema,
@@ -12,9 +13,12 @@ import {
   getSnapshot,
   getSql,
   getTasksSql,
+  listProjects,
   listRoutines,
   listTasks,
   putSnapshot,
+  upsertProject,
+  upsertProjectsBatch,
   upsertRoutine,
   upsertRoutinesBatch,
   upsertTask,
@@ -32,7 +36,9 @@ import {
   authorizeNotify,
   buildTasksDigest,
   buildTestNotify,
+  deliverRoutineReminders,
   notifyChannelsConfigured,
+  routineReminders,
   sendNotify,
 } from "./notify.mjs";
 import { fetchFromPlural, pluralLinked, authorizePluralHook, syncPluralIntoNeon } from "./plural-bridge.mjs";
@@ -275,6 +281,72 @@ async function handleRoutineItem(req, res, origin, id) {
   send(res, 405, { error: "Method not allowed" }, origin);
 }
 
+async function handleProjectsCollection(req, res, origin) {
+  if (!process.env.TASKS_DATABASE_URL) {
+    tasksDbMissing(res, origin);
+    return;
+  }
+  const sql = getTasksSql();
+  await ensureTasksSchema(sql);
+
+  if (req.method === "GET") {
+    const projects = await listProjects(sql);
+    send(res, 200, { projects }, origin);
+    return;
+  }
+
+  if (req.method === "PUT") {
+    const body = await readBody(req);
+    const projects = body?.projects;
+    if (!Array.isArray(projects)) {
+      send(res, 400, { error: "Payload inválido: falta projects[]." }, origin);
+      return;
+    }
+    try {
+      const saved = await upsertProjectsBatch(sql, projects);
+      send(res, 200, { ok: true, projects: saved }, origin);
+    } catch (e) {
+      send(res, 400, { error: e.message || "Projectos inválidos." }, origin);
+    }
+    return;
+  }
+
+  send(res, 405, { error: "Method not allowed" }, origin);
+}
+
+async function handleProjectItem(req, res, origin, id) {
+  if (!process.env.TASKS_DATABASE_URL) {
+    tasksDbMissing(res, origin);
+    return;
+  }
+  const sql = getTasksSql();
+  await ensureTasksSchema(sql);
+
+  if (req.method === "PUT") {
+    const body = await readBody(req);
+    const payload = { ...(body?.project ?? body ?? {}), id };
+    try {
+      const project = await upsertProject(sql, payload);
+      send(res, 200, { ok: true, project }, origin);
+    } catch (e) {
+      send(res, 400, { error: e.message || "Projecto inválido." }, origin);
+    }
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    const r = await deleteProject(sql, id);
+    if (!r.deleted) {
+      send(res, 404, { error: "Projecto não encontrado.", id }, origin);
+      return;
+    }
+    send(res, 200, { ok: true, id }, origin);
+    return;
+  }
+
+  send(res, 405, { error: "Method not allowed" }, origin);
+}
+
 async function handleNotifyTasks(req, res, origin, url) {
   const auth = authorizeNotify(req);
   if (!auth.ok) {
@@ -330,9 +402,10 @@ async function handleNotifyTasks(req, res, origin, url) {
   const tasks = await listTasks(sql);
   const routines = await listRoutines(sql);
   const digest = buildTasksDigest(tasks, { routines });
+  const reminders = routineReminders(routines);
 
   if (dry) {
-    send(res, 200, { ok: true, dry: true, digest, channels }, origin);
+    send(res, 200, { ok: true, dry: true, digest, reminders, channels }, origin);
     return;
   }
 
@@ -346,7 +419,8 @@ async function handleNotifyTasks(req, res, origin, url) {
     send(res, 502, { error: sent.reason, digest, channels }, origin);
     return;
   }
-  send(res, 200, { ok: true, via: sent.via, counts: digest.counts, channels }, origin);
+  const reminderReport = await deliverRoutineReminders(routines);
+  send(res, 200, { ok: true, via: sent.via, counts: digest.counts, reminders: reminderReport, channels }, origin);
 }
 
 const server = createServer(async (req, res) => {
@@ -482,6 +556,15 @@ const server = createServer(async (req, res) => {
       await handleRoutineItem(req, res, origin, decodeURIComponent(oneRoutine[1]));
       return;
     }
+    if (url.pathname === "/api/projects") {
+      await handleProjectsCollection(req, res, origin);
+      return;
+    }
+    const oneProject = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+    if (oneProject) {
+      await handleProjectItem(req, res, origin, decodeURIComponent(oneProject[1]));
+      return;
+    }
     if (url.pathname === "/api/plural/status" && req.method === "GET") {
       send(res, 200, { linked: pluralLinked() }, origin);
       return;
@@ -574,6 +657,6 @@ server.listen(PORT, () => {
   const tasks = process.env.TASKS_DATABASE_URL ? "tasks OK" : "tasks SEM TASKS_DATABASE_URL";
   const plural = pluralLinked() ? "plural OK" : "plural SEM PLURAL_API_*";
   console.log(
-    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/plural · /api/notify/tasks (${tasks}; ${plural})`,
+    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/projects · /api/plural · /api/notify/tasks (${tasks}; ${plural})`,
   );
 });

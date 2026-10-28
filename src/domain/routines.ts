@@ -19,6 +19,8 @@ export type Routine = {
   active: boolean;
   sortOrder: number;
   lastSpawnYmd: string;
+  /** YYYY-MM-DD em que esta ocorrência foi dada como feita. Vazio = por fazer. */
+  doneYmd: string;
   area: TaskArea;
   updatedAt: string;
 };
@@ -60,6 +62,11 @@ function normalizeTimebox(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.min(480, Math.round(n));
+}
+
+export function normalizeYmd(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
 export function normalizeStartsAt(raw: unknown): string {
@@ -134,6 +141,7 @@ export function createRoutine(draft: {
     active: draft.active === undefined ? true : Boolean(draft.active),
     sortOrder: draft.sortOrder ?? 0,
     lastSpawnYmd: "",
+    doneYmd: "",
     area: normalizeArea(draft.area),
     updatedAt: nowIso(),
   };
@@ -166,6 +174,7 @@ export function coerceRoutine(x: unknown): Routine | null {
     active: r.active === undefined ? true : Boolean(r.active),
     sortOrder: Number(r.sortOrder ?? r.sort_order ?? 0) || 0,
     lastSpawnYmd: String(r.lastSpawnYmd ?? r.last_spawn_ymd ?? ""),
+    doneYmd: normalizeYmd(r.doneYmd ?? r.done_ymd),
     area: normalizeArea(r.area),
     updatedAt,
   };
@@ -210,6 +219,22 @@ export function routinesOfWeekday(routines: Routine[], weekday: Weekday): Routin
   return routines
     .filter((r) => r.weekday === weekday)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+}
+
+export type RoutinePhase = "feito" | "agora" | "passou" | "a-seguir" | "sem-hora";
+
+/** Onde está esta rotina face ao relógio de hoje. `agora` dura o timebox, ou 15 min. */
+export function routinePhase(r: Routine, now: Date, ymd: string): RoutinePhase {
+  if (r.doneYmd === ymd) return "feito";
+  const clock = normalizeStartsAt(r.startsAt);
+  if (!clock) return "sem-hora";
+  const [hh, mm] = clock.split(":").map(Number);
+  const startMin = hh * 60 + mm;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const span = Math.max(r.timeboxMin || 0, 15);
+  if (nowMin < startMin) return "a-seguir";
+  if (nowMin < startMin + span) return "agora";
+  return "passou";
 }
 
 export function routinesInBlock(routines: Routine[], weekday: Weekday, dayBlock: TaskDayBlock): Routine[] {

@@ -2,12 +2,14 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Shell } from "./ui/Shell";
 import { TasksShell } from "./ui/TasksShell";
 import { PomodoroProvider } from "./domain/pomodoroStore";
+import { ProjectsProvider } from "./domain/projectsStore";
 import { RoutinesProvider } from "./domain/routinesStore";
 import { StoreProvider } from "./domain/store";
 import { TasksProvider } from "./domain/tasksStore";
 import { ConfirmProvider } from "./ui/ConfirmDialog";
 import { RequireAuth } from "./ui/RequireAuth";
 import { Hub } from "./pages/Hub";
+import { Projectos } from "./pages/Projectos";
 import { Login } from "./pages/Login";
 import { Tarefas } from "./pages/Tarefas";
 import { TarefasAlertas } from "./pages/TarefasAlertas";
@@ -33,15 +35,23 @@ function FinanceLayout() {
   );
 }
 
-function TasksLayout() {
+function WorkLayout() {
   return (
     <TasksProvider>
-      <RoutinesProvider>
-        <PomodoroProvider>
-          <TasksShell />
-        </PomodoroProvider>
-      </RoutinesProvider>
+      <ProjectsProvider>
+        <Outlet />
+      </ProjectsProvider>
     </TasksProvider>
+  );
+}
+
+function TasksLayout() {
+  return (
+    <RoutinesProvider>
+      <PomodoroProvider>
+        <TasksShell />
+      </PomodoroProvider>
+    </RoutinesProvider>
   );
 }
 
@@ -53,6 +63,7 @@ function ProtectedApp() {
         <Routes>
           <Route path="/" element={<Hub />} />
 
+          <Route element={<WorkLayout />}>
           <Route path="/tarefas" element={<TasksLayout />}>
             <Route index element={<Tarefas />} />
             <Route path="calendario" element={<TarefasCalendario />} />
@@ -60,6 +71,9 @@ function ProtectedApp() {
             <Route path="alertas" element={<TarefasAlertas />} />
             <Route path="sistema" element={<TarefasSistema />} />
             <Route path=":ambito" element={<Tarefas />} />
+          </Route>
+          <Route path="/projectos" element={<Projectos />} />
+          <Route path="/projectos/:id" element={<Projectos />} />
           </Route>
 
           <Route element={<FinanceLayout />}>

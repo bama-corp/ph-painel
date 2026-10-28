@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n api,web -c cyan,magenta npm:dev:api npm:dev:web",
+    "dev:web": "vite",
     "dev:api": "node server/dev-api.mjs",
-    "dev:all": "concurrently -n api,web -c cyan,magenta npm:dev:api npm:dev",
+    "dev:all": "npm run dev",
     "db:migrate": "tsx scripts/migrate-seed.ts",
     "db:seed": "tsx scripts/migrate-seed.ts --force",
     "db:check": "node scripts/check-env.mjs",

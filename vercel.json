@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/api/tasks", "destination": "/api/tasks/__list" },
     { "source": "/api/routines", "destination": "/api/routines/__list" },
+    { "source": "/api/projects", "destination": "/api/projects/__list" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],

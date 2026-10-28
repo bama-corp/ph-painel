@@ -1,13 +1,15 @@
-import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ENTITY } from "../domain/labels";
 import {
   blockFromTime,
   isoWeekday,
   normalizeStartsAt,
+  routinePhase,
   routinesForWeekday,
   routinesInBlock,
   todayYmd,
+  type RoutinePhase,
   WEEKDAY_LABEL,
   WEEKDAY_SHORT,
   WEEKDAYS,
@@ -68,11 +70,25 @@ function blockKey(day: Weekday, block: TaskDayBlock) {
   return `${day}:${block}`;
 }
 
+function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function clockLabel(now: Date) {
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 export function TarefasRotina() {
   const { routines, addMany, place, update, remove, spawnToday, syncStatus } = useRoutines();
   const confirm = useConfirm();
-  const todayWd = isoWeekday();
-  const ymd = todayYmd();
+  const now = useClock();
+  const todayWd = isoWeekday(now);
+  const ymd = todayYmd(now);
   const todayFocus = WEEKDAY_AREA_FOCUS[todayWd];
   const draggingId = useRef<string | null>(null);
 
@@ -97,7 +113,12 @@ export function TarefasRotina() {
     [routines],
   );
 
-  const todayCount = routinesForWeekday(routines, todayWd).length;
+  const todayItems = useMemo(
+    () => routinesForWeekday(routines, todayWd),
+    [routines, todayWd],
+  );
+  const todayCount = todayItems.length;
+  const todayDone = todayItems.filter((r) => r.doneYmd === ymd).length;
   const editing = routines.find((r) => r.id === editingId) ?? null;
 
   function resetForm() {
@@ -255,7 +276,10 @@ export function TarefasRotina() {
           {section.items.length === 0 ? (
             <li className="text-[0.72rem] text-ink/25">—</li>
           ) : (
-            section.items.map((r, index) => (
+            section.items.map((r, index) => {
+              const phase: RoutinePhase | null = day === todayWd ? routinePhase(r, now, ymd) : null;
+              const done = phase === "feito";
+              return (
               <li
                 key={r.id}
                 onDragOver={(e) => {
@@ -271,6 +295,8 @@ export function TarefasRotina() {
                 }}
                 className={`border-b border-ink/[0.06] pb-2 ${r.active ? "" : "opacity-50"} ${
                   editingId === r.id ? "bg-copper/[0.06]" : ""
+                } ${phase === "agora" ? "border-l-2 border-l-copper bg-copper/[0.07] pl-1" : ""} ${
+                  done ? "opacity-70" : ""
                 }`}
               >
                 <div className="flex items-start gap-1">
@@ -287,9 +313,20 @@ export function TarefasRotina() {
                   >
                     ⋮⋮
                   </span>
-                  <p className={`min-w-0 flex-1 text-left leading-snug text-ink/85 ${wide ? "text-base" : "text-[0.8rem]"}`}>
-                    {r.startsAt ? <span className="num mr-1.5 text-copper">{r.startsAt}</span> : null}
+                  <p
+                    className={`min-w-0 flex-1 text-left leading-snug ${wide ? "text-base" : "text-[0.8rem]"} ${
+                      done ? "text-ink/45 line-through" : "text-ink/85"
+                    }`}
+                  >
+                    {r.startsAt ? (
+                      <span className={`num mr-1.5 ${phase === "passou" ? "text-rust" : "text-copper"}`}>
+                        {r.startsAt}
+                      </span>
+                    ) : null}
                     {r.title}
+                    {phase === "agora" ? (
+                      <span className="ml-1.5 text-[0.62rem] uppercase tracking-[0.12em] text-copper">Agora</span>
+                    ) : null}
                   </p>
                 </div>
                 {wide && r.note ? (
@@ -304,6 +341,18 @@ export function TarefasRotina() {
                   {r.focusToday ? " · Hoje" : ""}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-4">
+                  {day === todayWd && r.active ? (
+                    <button
+                      type="button"
+                      aria-pressed={done}
+                      onClick={() => update(r.id, { doneYmd: done ? "" : ymd })}
+                      className={`text-[0.65rem] uppercase tracking-[0.1em] ${
+                        done ? "text-pine" : "text-ink/45 hover:text-ink"
+                      }`}
+                    >
+                      {done ? "✓ Feito" : "Feito"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={index === 0}
@@ -358,7 +407,8 @@ export function TarefasRotina() {
                   </button>
                 </div>
               </li>
-            ))
+              );
+            })
           )}
         </ul>
         <button
@@ -423,10 +473,26 @@ export function TarefasRotina() {
       </div>
       {spawnMsg ? <p className="mt-2 text-sm text-ink/55">{spawnMsg}</p> : null}
 
+      <DaySummary
+        items={todayItems}
+        now={now}
+        ymd={ymd}
+        todayWd={todayWd}
+        onToggle={(r) => update(r.id, { doneYmd: r.doneYmd === ymd ? "" : ymd })}
+        onMove={(r, day) => {
+          const index = routines.filter(
+            (x) => x.id !== r.id && x.weekday === day && x.dayBlock === r.dayBlock,
+          ).length;
+          place(r.id, { weekday: day, dayBlock: r.dayBlock, index });
+        }}
+      />
+
       <section className="mt-8">
         <div className="section-head">
           <Mark tone="pine" />
-          <h2 className="section-title">{openDay === null ? "Semana" : WEEKDAY_LABEL[openDay]}</h2>
+          <h2 className="section-title">
+            {openDay === null ? "Semana" : openDay === todayWd ? `Hoje · ${WEEKDAY_LABEL[openDay]}` : WEEKDAY_LABEL[openDay]}
+          </h2>
           {openDay !== null ? (
             <button
               type="button"
@@ -455,10 +521,15 @@ export function TarefasRotina() {
                     aria-pressed={on}
                     onClick={() => setOpenDay(d)}
                     className={`border px-2 py-1 text-[0.72rem] uppercase tracking-[0.08em] ${
-                      on ? "border-ink bg-ink text-paper" : "border-ink/15 text-ink/55 hover:border-ink/40"
-                    } ${d === todayWd && !on ? "text-copper" : ""}`}
+                      on
+                        ? "border-ink bg-ink text-paper"
+                        : d === todayWd
+                          ? "border-copper bg-copper/[0.08] text-copper"
+                          : "border-ink/15 text-ink/55 hover:border-ink/40"
+                    }`}
                   >
                     {WEEKDAY_SHORT[d]}
+                    {d === todayWd ? " · hoje" : ""}
                   </button>
                 );
               })}
@@ -484,17 +555,36 @@ export function TarefasRotina() {
               return (
                 <div
                   key={day}
-                  className={`min-h-[8rem] border-t-2 pt-3 ${isToday ? "border-copper" : "border-ink/10"}`}
+                  className={`min-h-[8rem] border-t-2 pt-3 ${
+                    isToday
+                      ? "border-copper bg-copper/[0.07] px-2 pb-3 shadow-[inset_0_0_0_1px_rgba(176,112,64,0.28)]"
+                      : "border-ink/10"
+                  }`}
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <h3 className={`font-display text-[0.95rem] ${isToday ? "text-copper" : "text-ink/80"}`}>
                       <span className="sm:hidden">{WEEKDAY_SHORT[day]}</span>
                       <span className="hidden sm:inline">{WEEKDAY_LABEL[day]}</span>
+                      {isToday ? (
+                        <span className="ml-1.5 align-middle text-[0.58rem] uppercase tracking-[0.14em]">
+                          Hoje
+                        </span>
+                      ) : null}
                     </h3>
                     <span className="num text-[0.65rem] text-ink/35">
-                      {sections.reduce((n, s) => n + s.items.length, 0)}
+                      {isToday && todayCount > 0
+                        ? `${todayDone}/${todayCount}`
+                        : sections.reduce((n, s) => n + s.items.length, 0)}
                     </span>
                   </div>
+                  {isToday && todayCount > 0 ? (
+                    <div className="mt-2 h-1 bg-ink/10" aria-hidden>
+                      <div
+                        className="h-full bg-pine transition-[width] duration-300"
+                        style={{ width: `${Math.round((todayDone / todayCount) * 100)}%` }}
+                      />
+                    </div>
+                  ) : null}
                   <p className="mt-1 text-[0.65rem] uppercase tracking-[0.1em] text-ink/40">
                     {focus.label} · {focus.hours}
                   </p>
@@ -678,5 +768,116 @@ export function TarefasRotina() {
         )}
       </section>
     </div>
+  );
+}
+
+function DaySummary({
+  items,
+  now,
+  ymd,
+  todayWd,
+  onToggle,
+  onMove,
+}: {
+  items: Routine[];
+  now: Date;
+  ymd: string;
+  todayWd: Weekday;
+  onToggle: (r: Routine) => void;
+  onMove: (r: Routine, day: Weekday) => void;
+}) {
+  const rows = items
+    .map((r) => ({ r, phase: routinePhase(r, now, ymd) }))
+    .sort((a, b) => (a.r.startsAt || "99:99").localeCompare(b.r.startsAt || "99:99") || a.r.sortOrder - b.r.sortOrder);
+  const groups: { id: RoutinePhase; label: string; tone: string }[] = [
+    { id: "agora", label: "Agora", tone: "text-copper" },
+    { id: "passou", label: "Não feito", tone: "text-rust" },
+    { id: "a-seguir", label: "A seguir", tone: "text-ink/70" },
+    { id: "sem-hora", label: "Sem hora", tone: "text-ink/55" },
+    { id: "feito", label: "Feito", tone: "text-pine" },
+  ];
+  const done = rows.filter((x) => x.phase === "feito").length;
+  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  const closing = now.getHours() >= 18;
+  const others = WEEKDAYS.filter((d) => d !== todayWd);
+
+  return (
+    <section className="mt-8 border border-copper/30 bg-copper/[0.05] px-4 py-5 sm:px-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Mark tone="copper" />
+          <h2 className="font-display text-xl tracking-tight text-ink">
+            {closing ? "Fecho do dia" : "Resumo do dia"}
+          </h2>
+        </div>
+        <p className="num text-sm text-ink/55">
+          {clockLabel(now)} · {done}/{items.length || 0}
+        </p>
+      </div>
+      <div className="mt-3 h-1.5 bg-ink/10" aria-hidden>
+        <div className="h-full bg-pine transition-[width] duration-300" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-3 text-sm text-ink/55">
+        {closing
+          ? "O que ficou por fazer pode ir para outro dia da semana."
+          : "Marca o que já fizeste. À hora de cada rotina, o ntfy manda o lembrete."}
+      </p>
+
+      {items.length === 0 ? (
+        <p className="mt-4 text-sm text-ink/45">Hoje sem rotina activa.</p>
+      ) : (
+        <div className="mt-5 space-y-5">
+          {groups.map((g) => {
+            const list = rows.filter((x) => x.phase === g.id);
+            if (!list.length) return null;
+            return (
+              <div key={g.id}>
+                <p className={`text-[0.65rem] uppercase tracking-[0.14em] ${g.tone}`}>
+                  {g.label} · {list.length}
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {list.map(({ r }) => (
+                    <li key={r.id} className="border-b border-ink/[0.06] pb-2">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <p className={`min-w-0 flex-1 text-sm ${g.id === "feito" ? "text-ink/45 line-through" : "text-ink"}`}>
+                          {r.startsAt ? <span className="num mr-1.5 text-copper">{r.startsAt}</span> : null}
+                          {r.title}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onToggle(r)}
+                          className={`text-[0.65rem] uppercase tracking-[0.1em] ${
+                            g.id === "feito" ? "text-pine" : "text-ink/45 hover:text-ink"
+                          }`}
+                        >
+                          {g.id === "feito" ? "Desfazer" : "Feito"}
+                        </button>
+                      </div>
+                      {g.id !== "feito" ? (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <span className="mr-1 text-[0.62rem] uppercase tracking-[0.12em] text-ink/35">
+                            Mover
+                          </span>
+                          {others.map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => onMove(r, d)}
+                              className="border border-ink/15 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-[0.08em] text-ink/55 hover:border-ink hover:text-ink"
+                            >
+                              {WEEKDAY_SHORT[d]}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

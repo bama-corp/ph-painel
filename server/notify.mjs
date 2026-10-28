@@ -77,7 +77,7 @@ async function sendTelegram(text) {
 
 /**
  * @param {string} text
- * @param {{ title?: string, priority?: string, tags?: string, click?: string }} [meta]
+ * @param {{ title?: string, priority?: string, tags?: string, click?: string, at?: string }} [meta]
  */
 async function sendNtfy(text, meta = {}) {
   const topic = (process.env.NTFY_TOPIC || "").trim();
@@ -99,6 +99,7 @@ async function sendNtfy(text, meta = {}) {
       Tags: tags,
     };
     if (click) headers.Click = click;
+    if (meta.at) headers.At = meta.at;
 
     const res = await fetch(`${base}/${encodeURIComponent(topic)}`, {
       method: "POST",
@@ -112,6 +113,21 @@ async function sendNtfy(text, meta = {}) {
   } catch (e) {
     return { ok: false, reason: `ntfy: ${e.message || e}` };
   }
+}
+
+/**
+ * Lembrete agendado no ntfy (cabeçalho At). Não cai para o Telegram —
+ * senão a mensagem saía já, em vez de à hora da rotina.
+ * @param {{ text: string, title?: string, priority?: string, tags?: string, click?: string, at: string }} msg
+ */
+export async function sendRoutineReminder(msg) {
+  return sendNtfy(msg.text, {
+    title: msg.title,
+    priority: msg.priority || "high",
+    tags: msg.tags || "alarm_clock",
+    click: msg.click,
+    at: msg.at,
+  });
 }
 
 /** Data local YYYY-MM-DD (não UTC). */
@@ -273,6 +289,94 @@ export function buildTasksDigest(tasks, opts = {}) {
     tags: meta.tags,
     click: meta.click,
     counts,
+  };
+}
+
+function notifyOffsetMin() {
+  const n = Number(process.env.NOTIFY_TZ_OFFSET_MIN ?? 60);
+  return Number.isFinite(n) ? Math.max(-12 * 60, Math.min(14 * 60, Math.round(n))) : 60;
+}
+
+/** Data civil no fuso do painel (Luanda, UTC+1 por omissão). */
+export function zonedYmd(date, offsetMin = notifyOffsetMin()) {
+  const shifted = new Date(date.getTime() + offsetMin * 60 * 1000);
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Instante UTC de uma hora local `HH:mm` no dia `ymd`. */
+export function zonedStamp(ymd, hhmm, offsetMin = notifyOffsetMin()) {
+  const [y, mo, d] = ymd.split("-").map(Number);
+  const [hh, mm] = hhmm.split(":").map(Number);
+  return Date.UTC(y, mo - 1, d, hh, mm) - offsetMin * 60 * 1000;
+}
+
+/**
+ * Um lembrete ntfy por rotina activa de amanhã que tenha hora.
+ * O cron diário corre de manhã e agenda o dia seguinte — cada hora sai uma vez.
+ * @param {Array<{ title?: string, weekday?: number, active?: boolean, startsAt?: string, dayBlock?: string, timeboxMin?: number, entityId?: string, sortOrder?: number }>} routines
+ * @param {{ now?: Date | string | number, offsetMin?: number }} [opts]
+ */
+export function routineReminders(routines, opts = {}) {
+  const offsetMin = Number.isFinite(opts.offsetMin) ? opts.offsetMin : notifyOffsetMin();
+  const now = opts.now instanceof Date ? opts.now : new Date(opts.now ?? Date.now());
+  const today = zonedYmd(now, offsetMin);
+  const tomorrow = addDaysYmd(today, 1);
+  const wd = isoWeekdayFromYmd(tomorrow);
+  const dayName = WEEKDAY_PT[wd] || "Amanhã";
+  const click = (process.env.NOTIFY_CLICK_URL || "").trim() || undefined;
+
+  return (routines || [])
+    .filter(
+      (r) =>
+        r &&
+        r.active !== false &&
+        Number(r.weekday) === wd &&
+        /^\d{2}:\d{2}$/.test(String(r.startsAt || "")),
+    )
+    .sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)))
+    .map((r) => {
+      const atMs = zonedStamp(tomorrow, r.startsAt, offsetMin);
+      return { r, atMs };
+    })
+    .filter(({ atMs }) => atMs > now.getTime() + 60_000)
+    .map(({ r, atMs }) => {
+      const title = String(r.title || "").trim() || "(sem título)";
+      const block = DAY_BLOCK_PT[r.dayBlock] || "";
+      const mins = Number(r.timeboxMin) > 0 ? `${r.timeboxMin}m` : "";
+      const label = entityLabel(r.entityId);
+      const extra = [dayName, r.startsAt, block, mins, label].filter(Boolean).join(" · ");
+      return {
+        text: `${title}\n${extra}`,
+        title: `Rotina · ${r.startsAt}`,
+        priority: "high",
+        tags: "alarm_clock",
+        at: new Date(atMs).toISOString().replace(/\.\d{3}Z$/, "Z"),
+        click,
+      };
+    });
+}
+
+/** Envia os lembretes de amanhã em paralelo. Falhas não apagam o digest. */
+export async function deliverRoutineReminders(routines, opts) {
+  const planned = routineReminders(routines, opts);
+  const results = await Promise.all(
+    planned.map(async (msg) => {
+      const sent = await sendRoutineReminder(msg);
+      return {
+        at: msg.at,
+        title: msg.title,
+        ok: sent.ok,
+        reason: sent.ok ? undefined : sent.reason,
+      };
+    }),
+  );
+  return {
+    planned: planned.length,
+    sent: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
   };
 }
 
