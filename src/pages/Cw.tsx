@@ -52,7 +52,7 @@ export function Cw() {
       />
 
       <Section
-        title="BAI 2"
+        title="Conta BAI"
         mark={meta.tone}
         hint="Conta da PDS. Não há fatia pessoal nesta conta."
       >

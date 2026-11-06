@@ -77,6 +77,7 @@ export function Orcamento() {
     setBudgetMethod,
     allocate,
     deallocate,
+    deallocateAll,
     distributeEntry,
     addIncomeSource,
     setIncomeSource,
@@ -192,6 +193,15 @@ export function Orcamento() {
       return;
     }
     setAmounts((a) => ({ ...a, [envelopeId]: "" }));
+    clearErr();
+  }
+
+  function tirarTudo() {
+    const r = deallocateAll();
+    if (!r.ok) {
+      showErr("bolsos", r.reason);
+      return;
+    }
     clearErr();
   }
 
@@ -661,6 +671,11 @@ export function Orcamento() {
         <TotalRow label="Total bolsos" mark="pine">
           <Money n={nosBolsos} />
         </TotalRow>
+        {nosBolsos > 0 ? (
+          <button type="button" className="btn-ghost mt-4" onClick={tirarTudo}>
+            Tirar tudo
+          </button>
+        ) : null}
         <ZoneErr show={errZone === "bolsos"} msg={err} />
       </Section>
     </div>

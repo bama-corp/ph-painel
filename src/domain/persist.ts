@@ -1,4 +1,11 @@
-import { seedState } from "./seed";
+import { applyDeallocateAll, partyOf, postLiquidityAdjustment, snapEntityLiveTotal } from "./engine";
+import {
+  ACCOUNT_SNAPSHOT,
+  OTHER_COMPANY_LIVE_SNAPSHOT,
+  PDS_LIVE_SNAPSHOT,
+  PERSONAL_LIVE_SNAPSHOT,
+  seedState,
+} from "./seed";
 import type {
   AppState,
   BudgetBucket,
@@ -80,6 +87,9 @@ export function migrate(state: AppState): AppState {
     "Caixa Rove+": "Caixa Plural",
     "ATLANTICO — teu": "ATLANTICO",
     Cofre: "Carteira",
+    BAI: "BAI 1",
+    STAND: "STANDARD",
+    "BAI 2": "Conta BAI",
     "CW — conta corrente do proprietário": "PDS — conta corrente do proprietário",
     "Equipamentos CW (PS, PCs, impressoras)": "Equipamentos PDS (PS, PCs, impressoras)",
   };
@@ -130,8 +140,44 @@ export function migrate(state: AppState): AppState {
     });
   }
 
+  const dropNunoDaniela =
+    fromVersion < 23
+      ? [
+          "nuno",
+          "daniela",
+          ...parties
+            .filter((p) => /^nuno$/i.test(p.name.trim()) || /^daniela$/i.test(p.name.trim()))
+            .map((p) => p.id),
+        ]
+      : [];
+  const dropPdsCustody =
+    fromVersion < 24
+      ? parties
+          .filter(
+            (p) =>
+              p.ownership === "custody" &&
+              /^pds(?:\s|$)/i.test(p.name.trim()),
+          )
+          .map((p) => p.id)
+      : [];
+  const dropTuniCustody =
+    fromVersion < 25
+      ? parties
+          .filter(
+            (p) =>
+              p.ownership === "custody" &&
+              /^tuni(?:\s|$)/i.test(p.name.trim()),
+          )
+          .map((p) => p.id)
+      : [];
   const removedPartyIds = [
-    ...new Set([...(state.removedPartyIds ?? []), ...(fromVersion < 13 ? ["meneza"] : [])]),
+    ...new Set([
+      ...(state.removedPartyIds ?? []),
+      ...(fromVersion < 13 ? ["meneza"] : []),
+      ...dropNunoDaniela,
+      ...dropPdsCustody,
+      ...dropTuniCustody,
+    ]),
   ];
 
   // v13 — Meneza (pago, 0) sai; remoções de parties passam a ser respeitadas.
@@ -144,6 +190,13 @@ export function migrate(state: AppState): AppState {
   // v14 — conta corrente PDS (89.200) a zero: já não conta como saldo a receber.
   if (fromVersion < 14) {
     parties = parties.map((p) => (p.id === "emanuel-cw" ? { ...p, opening: 0 } : p));
+  }
+
+  // v15 — snapshot contas 2 nov 2026 (estado das contas).
+  if (fromVersion < 15) {
+    accounts = accounts.map((a) =>
+      ACCOUNT_SNAPSHOT[a.id] !== undefined ? { ...a, opening: ACCOUNT_SNAPSHOT[a.id] } : a,
+    );
   }
 
   const accountIds = new Set(accounts.map((a) => a.id));
@@ -169,7 +222,7 @@ export function migrate(state: AppState): AppState {
       ? state.month
       : nowMonth;
 
-  return {
+  let next: AppState = {
     ...state,
     schemaVersion: SCHEMA_VERSION,
     asOf: todayIso(),
@@ -189,6 +242,105 @@ export function migrate(state: AppState): AppState {
     budgetLines: migrateBudgetLines(state),
     roveClients: state.roveClients ?? seed.roveClients,
   };
+
+  // v16 — bolsos a zero para realocar com os saldos novos.
+  if (fromVersion < 16) {
+    const emptied = applyDeallocateAll(next, { at: next.asOf, idPrefix: "d-v16" });
+    if (emptied.ok) next = emptied.state;
+  }
+
+  // v17 — saldo vivo = extracto (opening + movimentos antigos distorciam o Total).
+  if (fromVersion < 17) {
+    next = {
+      ...next,
+      accounts: next.accounts.map((a) =>
+        ACCOUNT_SNAPSHOT[a.id] !== undefined ? { ...a, opening: ACCOUNT_SNAPSHOT[a.id] } : a,
+      ),
+    };
+    for (const [id, target] of Object.entries(ACCOUNT_SNAPSHOT)) {
+      if (!next.accounts.some((a) => a.id === id)) continue;
+      const r = postLiquidityAdjustment(next, id, target, {
+        at: next.asOf,
+        id: `ajuste-v17-${id}`,
+        note: "Snapshot 2 nov 2026 — saldo vivo = extracto",
+      });
+      if (r.ok) next = r.state;
+    }
+  }
+
+  // v18 — Total pessoal = extracto. Não toca parties/custódia; opening fica.
+  if (fromVersion < 18) {
+    for (const [id, target] of Object.entries(PERSONAL_LIVE_SNAPSHOT)) {
+      if (!next.accounts.some((a) => a.id === id)) continue;
+      const r = postLiquidityAdjustment(next, id, target, {
+        at: next.asOf,
+        id: `ajuste-v18-${id}`,
+        note: "Extracto pessoal — só o Total da conta",
+      });
+      if (r.ok) next = r.state;
+    }
+  }
+
+  // v19 — Total PDS = extracto (Caixa + Conta BAI).
+  if (fromVersion < 19) {
+    for (const [id, target] of Object.entries(PDS_LIVE_SNAPSHOT)) {
+      if (!next.accounts.some((a) => a.id === id)) continue;
+      const r = postLiquidityAdjustment(next, id, target, {
+        at: next.asOf,
+        id: `ajuste-v19-${id}`,
+        note: "Extracto PDS — só o Total da conta",
+      });
+      if (r.ok) next = r.state;
+    }
+  }
+
+  // v20 — Total Plural, Picasso's e PH = extracto.
+  if (fromVersion < 20) {
+    for (const [id, target] of Object.entries(OTHER_COMPANY_LIVE_SNAPSHOT)) {
+      if (!next.accounts.some((a) => a.id === id)) continue;
+      const r = postLiquidityAdjustment(next, id, target, {
+        at: next.asOf,
+        id: `ajuste-v20-${id}`,
+        note: "Extracto empresas — só o Total da conta",
+      });
+      if (r.ok) next = r.state;
+    }
+  }
+
+  // v21 — Caixa actual Plural / Picasso's / PH (resolve a conta certa; reaplica se o v20 não gravou).
+  if (fromVersion < 21) {
+    const jobs = [
+      ["rove", "rove-caixa", OTHER_COMPANY_LIVE_SNAPSHOT["rove-caixa"]],
+      ["picasso", "picasso-caixa", OTHER_COMPANY_LIVE_SNAPSHOT["picasso-caixa"]],
+      ["ph", "ph-caixa", OTHER_COMPANY_LIVE_SNAPSHOT["ph-caixa"]],
+    ] as const;
+    for (const [entity, id, target] of jobs) {
+      const r = snapEntityLiveTotal(next, entity, id, target, {
+        at: next.asOf,
+        id: `ajuste-v21-${id}`,
+        note: "Extracto empresas — Caixa actual",
+      });
+      if (r.ok) next = r.state;
+    }
+  }
+
+  // v22 — dívida Lenu = 232.500 (saldo vivo). Não mexe na classificação nem nas contas.
+  if (fromVersion < 22) {
+    const LENU = 232_500;
+    const party = next.parties.find(
+      (p) => p.id === "lenu" || /\blenu\b/i.test(p.name),
+    );
+    if (party) {
+      const live = partyOf(next, party.id);
+      const opening = roundKz(party.opening + (LENU - live));
+      next = {
+        ...next,
+        parties: next.parties.map((p) => (p.id === party.id ? { ...p, opening } : p)),
+      };
+    }
+  }
+
+  return next;
 }
 
 function migrateRecurring(state: AppState, seed: AppState): RecurringCost[] {

@@ -67,7 +67,7 @@ function loadEnvFile(path) {
 
 loadEnvFile(resolve(root, ".env"));
 
-const PORT = Number(process.env.PH_API_PORT || 8787);
+const PORT = Number(process.env.PH_API_PORT || 8788);
 
 async function readBody(req) {
   const chunks = [];
@@ -653,10 +653,10 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "127.0.0.1", () => {
   const tasks = process.env.TASKS_DATABASE_URL ? "tasks OK" : "tasks SEM TASKS_DATABASE_URL";
   const plural = pluralLinked() ? "plural OK" : "plural SEM PLURAL_API_*";
   console.log(
-    `PH API (Neon) em http://localhost:${PORT}/api/state · /api/tasks · /api/routines · /api/projects · /api/plural · /api/notify/tasks (${tasks}; ${plural})`,
+    `PH API (Neon) em http://127.0.0.1:${PORT}/api/state · /api/tasks · /api/routines · /api/projects · /api/plural · /api/notify/tasks (${tasks}; ${plural})`,
   );
 });

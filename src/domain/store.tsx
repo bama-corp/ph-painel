@@ -5,6 +5,7 @@ import {
   applyAllocate,
   applyDistributeEntry,
   applyDeallocate,
+  applyDeallocateAll,
   applyPartyOpening,
   applyPartyPayment,
   applyPartyCollection,
@@ -112,6 +113,7 @@ type Store = {
   addClient: (c: Omit<RoveClient, "id">) => void;
   allocate: (parts: { envelopeId: string; amount: number }[]) => AllocateResult;
   deallocate: (parts: { envelopeId: string; amount: number }[]) => AllocateResult;
+  deallocateAll: () => AllocateResult;
   distributeEntry: (amount: number) => AllocateResult;
   addIncomeSource: (draft: Omit<IncomeSource, "id">) => { ok: true; id: string } | { ok: false; reason: string };
   setIncomeSource: (id: string, patch: Partial<Omit<IncomeSource, "id">>) => void;
@@ -167,6 +169,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         skipPush.current = true;
         setState(remote.state);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.state));
+        await pushRemoteState(remote.state);
         const at = new Date().toISOString();
         setPluralSync({ status: "ok", at, error: null, linked: true });
         return { ok: true };
@@ -206,8 +209,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (remote.ok) {
         setState(remote.state);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.state));
-        setSyncStatus("synced");
-        setSyncError(null);
+        const pushed = await pushRemoteState(remote.state);
+        setSyncStatus(pushed.ok ? "synced" : "offline");
+        setSyncError(pushed.ok ? null : pushed.reason);
       } else if (remote.empty) {
         const local = loadState();
         setState(local);
@@ -419,6 +423,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     deallocate: (parts) => {
       const result = applyDeallocate(stateRef.current, parts);
+      if (result.ok) commitState(result.state);
+      return result;
+    },
+    deallocateAll: () => {
+      const result = applyDeallocateAll(stateRef.current);
       if (result.ok) commitState(result.state);
       return result;
     },

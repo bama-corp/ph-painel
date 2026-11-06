@@ -43,7 +43,7 @@ describe("Passo 1 — ownership / métricas fundamentais", () => {
     const bruto = personalGrossLiquidity(state);
     const custody = custodyLiquidity(state);
     expect(personalOwnLiquidity(state)).toBeCloseTo(bruto - custody, 2);
-    expect(personalOwnLiquidity(state)).toBeCloseTo(701794.08, 2);
+    expect(personalOwnLiquidity(state)).toBeCloseTo(528316.48, 2);
   });
 
   it("allocatablePersonal nunca inclui custody", () => {
@@ -82,11 +82,11 @@ describe("Passo 1 — ownership / métricas fundamentais", () => {
   });
 
   it("companyLiquidity = PDS + Plural + Picasso's + PH", () => {
-    expect(liquidityByEntity(state, "cw")).toBeCloseTo(39771.38, 2);
-    expect(liquidityByEntity(state, "rove")).toBeCloseTo(72508.78, 2);
-    expect(liquidityByEntity(state, "picasso")).toBe(21500);
-    expect(liquidityByEntity(state, "ph")).toBe(36500);
-    expect(companyLiquidity(state)).toBeCloseTo(39771.38 + 72508.78 + 21500 + 36500, 2);
+    expect(liquidityByEntity(state, "cw")).toBeCloseTo(75982.33, 2);
+    expect(liquidityByEntity(state, "rove")).toBeCloseTo(79101.94, 2);
+    expect(liquidityByEntity(state, "picasso")).toBe(26500);
+    expect(liquidityByEntity(state, "ph")).toBe(63500);
+    expect(companyLiquidity(state)).toBeCloseTo(75982.33 + 79101.94 + 26500 + 63500, 2);
   });
 
   it("company nunca entra em allocatablePersonal", () => {
@@ -102,7 +102,7 @@ describe("Passo 1 — ownership / métricas fundamentais", () => {
     expect(companyLiquidity(richer)).toBe(companyLiquidity(state) + 1_000_000);
   });
 
-  it("STAND está na liquidez pessoal bruta (conta própria, não empresa)", () => {
+  it("STANDARD está na liquidez pessoal bruta (conta própria, não empresa)", () => {
     expect(state.accounts.find((a) => a.id === "stand")?.entityId).toBe("pessoal");
     expect(personalGrossLiquidity(state)).toBeGreaterThanOrEqual(1_000_000);
   });

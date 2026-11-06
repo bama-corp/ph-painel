@@ -779,6 +779,18 @@ export function applyDeallocate(
   return { ok: true, state: { ...state, movements: [...extra, ...state.movements] } };
 }
 
+/** Tira o saldo actual de todos os bolsos e devolve ao alocável. */
+export function applyDeallocateAll(
+  state: AppState,
+  opts?: { at?: string; idPrefix?: string },
+): AllocateResult {
+  const parts = state.envelopes
+    .map((e) => ({ envelopeId: e.id, amount: envelopeOf(state, e.id) }))
+    .filter((p) => p.amount > 0.001);
+  if (parts.length === 0) return { ok: true, state };
+  return applyDeallocate(state, parts, opts);
+}
+
 /**
  * Distribui uma entrada de N Kz pelas regras já guardadas em state.rules.
  * Não distribui o stock inteiro — só o valor da entrada (≤ allocatablePersonal).
@@ -1307,4 +1319,30 @@ export function postLiquidityAdjustment(
     note: opts?.note ?? `Ajuste auditado de saldo (${current} → ${targetBalance})`,
   };
   return { ok: true, state: { ...state, movements: [m, ...state.movements] } };
+}
+
+function caixaAccountId(state: AppState, entity: EntityId, preferredId: string): string | null {
+  if (state.accounts.some((a) => a.id === preferredId)) return preferredId;
+  const named = state.accounts.find((a) => a.entityId === entity && /caixa/i.test(a.name));
+  if (named) return named.id;
+  const ofEntity = state.accounts.filter((a) => a.entityId === entity);
+  return ofEntity[0]?.id ?? null;
+}
+
+/**
+ * Põe o total da entidade (soma das contas) no extracto, ajustando a caixa.
+ * Não mexe em parties / custódia.
+ */
+export function snapEntityLiveTotal(
+  state: AppState,
+  entity: EntityId,
+  preferredAccountId: string,
+  targetTotal: number,
+  opts?: { at?: string; note?: string; id?: string },
+): OpeningEditResult {
+  const accountId = caixaAccountId(state, entity, preferredAccountId);
+  if (!accountId) return { ok: false, reason: `Sem conta de caixa (${entity}).`, state };
+  const others = roundKz(liquidityByEntity(state, entity) - liquidityOf(state, accountId));
+  const accountTarget = roundKz(targetTotal - others);
+  return postLiquidityAdjustment(state, accountId, accountTarget, opts);
 }

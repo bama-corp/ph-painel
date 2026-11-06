@@ -286,7 +286,7 @@ export function detectAccount(
   }
   if (/\bbai\b/i.test(text)) return byId("bai");
   if (/\bbfa\b/i.test(text)) return byId("bfa");
-  if (/\bstand\b/i.test(text)) return byId("stand");
+  if (/\bstand(?:ard)?\b/i.test(text)) return byId("stand");
   if (/\batlantico\b|\batlântico\b/i.test(text)) {
     const a = state.accounts.find((x) => /atlantico/i.test(x.name));
     if (a) return a.id;

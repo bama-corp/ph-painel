@@ -1,7 +1,7 @@
 import type { AppState, RoveClient, RoveProduct, RoveStatus } from "./types";
 import { roundKz } from "./money";
 
-/** Base da API PH (vazio em local = proxy Vite → :8787). */
+/** Base da API PH (vazio em local = proxy Vite → API local). */
 const PH_BASE = (import.meta.env.VITE_PH_API_URL as string | undefined)?.replace(/\/$/, "") || "";
 const PH_KEY = (import.meta.env.VITE_PH_API_KEY as string | undefined) || "";
 
